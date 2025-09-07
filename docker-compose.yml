@@ -1,0 +1,121 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: ["redis-server","--appendonly","yes"]
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  marketdata:
+    build: .
+    image: crypto-bot:latest
+    container_name: marketdata
+    command: python -m runner.marketdata
+    env_file: .env
+    environment:
+      BOT_ID: marketdata
+      HTTP_PORT: 9002
+      ENABLE_MOMENTUM: "false"
+      ENABLE_BASIS: "false"
+    depends_on:
+      - redis
+    restart: unless-stopped
+    volumes:
+      - duckdb-data:/app/data
+    healthcheck:
+      # usa Python nativo para evitar depender de 'curl' en la imagen
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:9002/healthz',timeout=2).status==200 else sys.exit(1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  momentum:
+    build: .
+    image: crypto-bot:latest
+    container_name: momentum
+    command: python -m runner.momentum
+    env_file: .env
+    environment:
+      BOT_ID: momentum
+      HTTP_PORT: 9001
+      ENABLE_MOMENTUM: "true"
+      ENABLE_BASIS: "false"
+    depends_on:
+      - redis
+      - marketdata
+    ports:
+      - "9001:9001"
+    volumes:
+      - duckdb-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:9001/healthz',timeout=2).status==200 else sys.exit(1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  basis:
+    build: .
+    image: crypto-bot:latest
+    container_name: basis
+    command: python -m runner.basis
+    env_file: .env
+    environment:
+      BOT_ID: basis
+      HTTP_PORT: 9003
+      ENABLE_MOMENTUM: "false"
+      ENABLE_BASIS: "true"
+    depends_on:
+      - redis
+      - marketdata
+    ports:
+      - "9003:9003"
+    volumes:
+      - duckdb-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:9003/healthz',timeout=2).status==200 else sys.exit(1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  riskd:
+    build: .
+    image: crypto-bot:latest
+    container_name: riskd
+    command: python -m runner.riskd
+    env_file: .env
+    environment:
+      BOT_ID: riskd
+      HTTP_PORT: 9004
+      ENABLE_MOMENTUM: "false"
+      ENABLE_BASIS: "false"
+    depends_on:
+      - redis
+      - momentum
+      - basis
+      - marketdata
+    ports:
+      - "9004:9004"
+    restart: unless-stopped
+    volumes:
+      - duckdb-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:9004/healthz',timeout=2).status==200 else sys.exit(1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  duckdb-data:
+  redis-data:

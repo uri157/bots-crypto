@@ -1,0 +1,15 @@
+binance-connector
+ccxt
+numpy
+pandas
+ta
+tenacity
+aiohttp
+fastapi
+python-telegram-bot
+duckdb
+redis
+uvicorn
+prometheus-client
+pydantic
+uvloop; sys_platform == 'linux'
