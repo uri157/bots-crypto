@@ -1,745 +1,411 @@
 [
     {
-    "title": "Initialize project structure and environment",
-    "body": "- [ ] Crear la estructura base del proyecto con paquetes y
-    módulos vacíos según el árbol especificado\n- [ ] Incluir `docker-
-    compose.yml` y `.env.sample` con configuración inicial y variables
-    requeridas\n- [ ] Proveer un `Dockerfile` para construir la imagen Python con
-    dependencias (binance-connector, etc.)\n- [ ] Verificar que `docker compose
-    up` levanta contenedores (bots y servicios) sin errores\n**DoD:** El comando
-    `docker compose up -d` inicia todos los servicios; los endpoints `/healthz`
-    de cada bot responden OK.",
-    "labels": [
-    "infra",
-    "devx"
-    ],
-    "priority": "P0",
-    "estimate_hours": 3,
-    "depends_on": [],
-    "files_touched": [
-    35"docker-compose.yml",
-    ".env.sample",
-    "Dockerfile",
-    "common/exchange.py",
-    "common/locks.py",
-    "control/api.py",
-    "datafeed/market_ws.py",
-    "datafeed/funding.py",
-    "momentum/strategy.py",
-    "momentum/executor.py",
-    "basis/calc.py",
-    "basis/executor.py",
-    "riskd/guard.py",
-    "storage/db.py",
-    "storage/models.py",
-    "metrics/server.py",
-    "runner/momentum.py",
-    "runner/basis.py",
-    "runner/marketdata.py",
-    "runner/riskd.py",
-    "tests/"
-    ],
-    "commands": [
-    "docker compose up -d",
-    "curl -f http://localhost:9001/healthz"
-    ],
-    "tests": [
-    "Given a new droplet with Docker installed, When running `docker
-    compose up -d`, Then all containers start and each service's health endpoint
-    returns 200."
-    ]
+        "title": "Initialize project structure and environment",
+        "body": "- [ ] Crear la estructura base del proyecto con paquetes y\n    m\u00f3dulos vac\u00edos seg\u00fan el \u00e1rbol especificado\n- [ ] Incluir `docker-\n    compose.yml` y `.env.sample` con configuraci\u00f3n inicial y variables\n    requeridas\n- [ ] Proveer un `Dockerfile` para construir la imagen Python con\n    dependencias (binance-connector, etc.)\n- [ ] Verificar que `docker compose\n    up` levanta contenedores (bots y servicios) sin errores\n**DoD:** El comando\n    `docker compose up -d` inicia todos los servicios; los endpoints `/healthz`\n    de cada bot responden OK.",
+        "labels": [
+            "infra",
+            "devx"
+        ],
+        "priority": "P0",
+        "estimate_hours": 3,
+        "depends_on": [],
+        "files_touched": [
+            "docker-compose.yml",
+            ".env.sample",
+            "Dockerfile",
+            "common/exchange.py",
+            "common/locks.py",
+            "control/api.py",
+            "datafeed/market_ws.py",
+            "datafeed/funding.py",
+            "momentum/strategy.py",
+            "momentum/executor.py",
+            "basis/calc.py",
+            "basis/executor.py",
+            "riskd/guard.py",
+            "storage/db.py",
+            "storage/models.py",
+            "metrics/server.py",
+            "runner/momentum.py",
+            "runner/basis.py",
+            "runner/marketdata.py",
+            "runner/riskd.py",
+            "tests/"
+        ],
+        "commands": [
+            "docker compose up -d",
+            "curl -f http://localhost:9001/healthz"
+        ],
+        "tests": [
+            "Given a new droplet with Docker installed, When running `docker\n    compose up -d`, Then all containers start and each service's health endpoint\n    returns 200."
+        ]
     },
     {
-    "title": "Implement exchange abstraction and utilities",
-    "body": "- [ ] Integrar el cliente de Binance (SDK binance-connector) y
-    establecer modo hedge/dual (posición dual) al iniciar\n- [ ] Implementar
-    funciones de orden: enviar órdenes de mercado, stop-loss y TP con
-    `newClientOrderId` para idempotencia\n- [ ] Implementar redondeo de precios y
-    cantidades según `tickSize` y `stepSize` del símbolo (usando exchangeInfo)\n-
-    [ ] Obtener tasas de funding actuales por REST (cada 5min) y lista de
-    contratos trimestrales disponibles para cálculo de basis\n- [ ] Manejar
-    errores y reintentos: en códigos 429/5xx o -1013/-2010 reintentar con backoff
-    exponencial (tenacity)\n**DoD:** Se puede colocar una orden de prueba (en
-    modo testnet o simulación) exitosamente; los precios y cantidades se ajustan
-    correctamente; los errores transitorios se reintentan y lanzan ExchangeError
-    tras agotar reintentos.",
-    "labels": [
-    "infra"
-    ],
-    "priority": "P0",
-    "estimate_hours": 4,
-    36"depends_on": [
-    "Initialize project structure and environment"
-    ],
-    "files_touched": [
-    "common/exchange.py",
-    "common/__init__.py",
-    "runner/momentum.py",
-    "runner/basis.py",
-    "runner/marketdata.py"
-    ],
-    "commands": [
-    "pytest tests/test_exchange.py -v"
-    ],
-    "tests": [
-    "Given a symbol with tickSize=0.1 and stepSize=0.001, When placing an
-    order via Exchange, Then the price and quantity are rounded down to valid
-    increments.",
-    "Given a temporary network error (e.g., HTTP 503) on order placement,
-    When placing an order, Then the Exchange retries automatically and succeeds
-    or raises ExchangeError after max attempts."
-    ]
+        "title": "Implement exchange abstraction and utilities",
+        "body": "- [ ] Integrar el cliente de Binance (SDK binance-connector) y\n    establecer modo hedge/dual (posici\u00f3n dual) al iniciar\n- [ ] Implementar\n    funciones de orden: enviar \u00f3rdenes de mercado, stop-loss y TP con\n    `newClientOrderId` para idempotencia\n- [ ] Implementar redondeo de precios y\n    cantidades seg\u00fan `tickSize` y `stepSize` del s\u00edmbolo (usando exchangeInfo)\n-\n    [ ] Obtener tasas de funding actuales por REST (cada 5min) y lista de\n    contratos trimestrales disponibles para c\u00e1lculo de basis\n- [ ] Manejar\n    errores y reintentos: en c\u00f3digos 429/5xx o -1013/-2010 reintentar con backoff\n    exponencial (tenacity)\n**DoD:** Se puede colocar una orden de prueba (en\n    modo testnet o simulaci\u00f3n) exitosamente; los precios y cantidades se ajustan\n    correctamente; los errores transitorios se reintentan y lanzan ExchangeError\n    tras agotar reintentos.",
+        "labels": [
+            "infra"
+        ],
+        "priority": "P0",
+        "estimate_hours": 4,
+        "depends_on": [
+            "Initialize project structure and environment"
+        ],
+        "files_touched": [
+            "common/exchange.py",
+            "common/__init__.py",
+            "runner/momentum.py",
+            "runner/basis.py",
+            "runner/marketdata.py"
+        ],
+        "commands": [
+            "pytest tests/test_exchange.py -v"
+        ],
+        "tests": [
+            "Given a symbol with tickSize=0.1 and stepSize=0.001, When placing an\n    order via Exchange, Then the price and quantity are rounded down to valid\n    increments.",
+            "Given a temporary network error (e.g., HTTP 503) on order placement,\n    When placing an order, Then the Exchange retries automatically and succeeds\n    or raises ExchangeError after max attempts."
+        ]
     },
     {
-    "title": "Implement Redis capital lock for mutual exclusion",
-    "body": "- [ ] Implementar funciones en Redis para adquirir (`SET NX`),
-    renovar (`EXPIRE`) y liberar el lock de capital\n- [ ] Usar
-    `CAPITAL_LOCK_KEY` global; valor = BOT_ID para identificar quién posee el
-    lock\n- [ ] Verificar el lock antes de cada operación de trading: si el lock
-    no pertenece al bot, iniciar `PAUSE` y no enviar órdenes\n- [ ] Renovar el
-    lock periódicamente (p. ej. cada 30s) mientras el bot esté activo para evitar
-    expiración accidental\n- [ ] Probar contención: solo un proceso a la vez
-    obtiene el lock; el segundo bot debe quedar en pausa si no logra
-    lock\n**DoD:** Si dos bots se inician simultáneamente, solo uno adquiere el
-    lock y el otro queda en espera (estado PAUSED); al liberar el lock
-    manualmente (ej. borrando clave en Redis), el bot activo detecta la pérdida
-    de lock, cierra posiciones (drain) y pasa a PAUSED.",
-    "labels": [
-    "infra",
-    "riesgo"
-    ],
-    "priority": "P0",
-    "estimate_hours": 2,
-    "depends_on": [
-    "Initialize project structure and environment",
-    "Implement exchange abstraction and utilities"
-    ],
-    "files_touched": [
-    "common/locks.py",
-    "runner/momentum.py",
-    "runner/basis.py",
-    "riskd/guard.py"
-    37],
-    "commands": [
-    "redis-cli GET capital:lock"
-    ],
-    "tests": [
-    "Given no lock exists, When a bot calls acquire_lock, Then it returns
-    True and Redis key is set to that bot's ID.",
-    "Given one bot holds the lock, When another bot attempts acquire_lock,
-    Then it returns False and that bot should not execute trades (pause state).",
-    "Given a bot holds the lock, When the lock expires or is manually
-    removed, Then the bot detects loss of lock and transitions to paused mode
-    after closing any open positions."
-    ]
+        "title": "Implement Redis capital lock for mutual exclusion",
+        "body": "- [ ] Implementar funciones en Redis para adquirir (`SET NX`),\n    renovar (`EXPIRE`) y liberar el lock de capital\n- [ ] Usar\n    `CAPITAL_LOCK_KEY` global; valor = BOT_ID para identificar qui\u00e9n posee el\n    lock\n- [ ] Verificar el lock antes de cada operaci\u00f3n de trading: si el lock\n    no pertenece al bot, iniciar `PAUSE` y no enviar \u00f3rdenes\n- [ ] Renovar el\n    lock peri\u00f3dicamente (p. ej. cada 30s) mientras el bot est\u00e9 activo para evitar\n    expiraci\u00f3n accidental\n- [ ] Probar contenci\u00f3n: solo un proceso a la vez\n    obtiene el lock; el segundo bot debe quedar en pausa si no logra\n    lock\n**DoD:** Si dos bots se inician simult\u00e1neamente, solo uno adquiere el\n    lock y el otro queda en espera (estado PAUSED); al liberar el lock\n    manualmente (ej. borrando clave en Redis), el bot activo detecta la p\u00e9rdida\n    de lock, cierra posiciones (drain) y pasa a PAUSED.",
+        "labels": [
+            "infra",
+            "riesgo"
+        ],
+        "priority": "P0",
+        "estimate_hours": 2,
+        "depends_on": [
+            "Initialize project structure and environment",
+            "Implement exchange abstraction and utilities"
+        ],
+        "files_touched": [
+            "common/locks.py",
+            "runner/momentum.py",
+            "runner/basis.py",
+            "riskd/guard.py"
+        ],
+        "commands": [
+            "redis-cli GET capital:lock"
+        ],
+        "tests": [
+            "Given no lock exists, When a bot calls acquire_lock, Then it returns\n    True and Redis key is set to that bot's ID.",
+            "Given one bot holds the lock, When another bot attempts acquire_lock,\n    Then it returns False and that bot should not execute trades (pause state).",
+            "Given a bot holds the lock, When the lock expires or is manually\n    removed, Then the bot detects loss of lock and transitions to paused mode\n    after closing any open positions."
+        ]
     },
     {
-    "title": "Implement HTTP control API for bot management",
-    "body": "- [ ] Configurar FastAPI en cada bot para exponer endpoints `/
-    status`, `/pause`, `/resume`, `/close_all`, `/mode`\n- [ ] `/status`:
-    devuelve información de estado (posiciones abiertas, PnL actual, modo, etc.)
-    usando modelos Pydantic\n- [ ] `/pause`: pone el bot en modo PAUSADO (no
-    inicia nuevas operaciones) y activa el cierre (`drain`) de posiciones
-    abiertas (reduce-only)\n- [ ] `/resume`: reanuda la operativa normal si el
-    lock de capital está disponible\n- [ ] `/close_all`: cierra inmediatamente
-    todas las posiciones abiertas (órdenes reduce-only) sin cambiar el estado de
-    operación (que puede seguir activo o pausado)\n- [ ] `/mode?set=paper|live`:
-    cambia el modo de operación a simulación (paper) o real; en modo paper las
-    órdenes no se envían a exchange sino simuladas\n**DoD:** Llamadas HTTP a los
-    endpoints controlan el bot: `/pause` detiene operaciones nuevas y cierra
-    posiciones existentes, `/resume` permite continuar, `/close_all` cierra
-    posiciones sin pausar futuras operaciones, y `/mode` cambia entre simulación
-    y real. `/status` refleja correctamente el estado actualizado.",
-    "labels": [
-    "infra",
-    "devx"
-    ],
-    "priority": "P0",
-    "estimate_hours": 3,
-    "depends_on": [
-    "Implement Redis capital lock for mutual exclusion"
-    ],
-    "files_touched": [
-    "control/api.py",
-    "runner/momentum.py",
-    "runner/basis.py",
-    "runner/riskd.py",
-    "storage/models.py"
-    ],
-    "commands": [
-    "curl -X POST http://localhost:9001/pause",
-    "curl http://localhost:9001/status"
-    ],
-    38"tests": [
-    "Given the bot is running normally, When a `/pause` command is
-    received, Then the bot stops taking new positions and any open position is
-    closed (drained) promptly.",
-    "Given the bot is paused, When a `/resume` command is received and
-    capital lock is free, Then the bot resumes trading (state ACTIVE).",
-    "Given a position is open, When call `/close_all`, Then all active
-    positions are closed immediately and the bot remains in active or paused
-    state as before.",
-    "Given the bot is in paper mode, When `/mode?set=live` is called, Then
-    subsequent orders go to real exchange (verified by actual API call or testnet
-    trade)."
-    ]
+        "title": "Implement HTTP control API for bot management",
+        "body": "- [ ] Configurar FastAPI en cada bot para exponer endpoints `/\n    status`, `/pause`, `/resume`, `/close_all`, `/mode`\n- [ ] `/status`:\n    devuelve informaci\u00f3n de estado (posiciones abiertas, PnL actual, modo, etc.)\n    usando modelos Pydantic\n- [ ] `/pause`: pone el bot en modo PAUSADO (no\n    inicia nuevas operaciones) y activa el cierre (`drain`) de posiciones\n    abiertas (reduce-only)\n- [ ] `/resume`: reanuda la operativa normal si el\n    lock de capital est\u00e1 disponible\n- [ ] `/close_all`: cierra inmediatamente\n    todas las posiciones abiertas (\u00f3rdenes reduce-only) sin cambiar el estado de\n    operaci\u00f3n (que puede seguir activo o pausado)\n- [ ] `/mode?set=paper|live`:\n    cambia el modo de operaci\u00f3n a simulaci\u00f3n (paper) o real; en modo paper las\n    \u00f3rdenes no se env\u00edan a exchange sino simuladas\n**DoD:** Llamadas HTTP a los\n    endpoints controlan el bot: `/pause` detiene operaciones nuevas y cierra\n    posiciones existentes, `/resume` permite continuar, `/close_all` cierra\n    posiciones sin pausar futuras operaciones, y `/mode` cambia entre simulaci\u00f3n\n    y real. `/status` refleja correctamente el estado actualizado.",
+        "labels": [
+            "infra",
+            "devx"
+        ],
+        "priority": "P0",
+        "estimate_hours": 3,
+        "depends_on": [
+            "Implement Redis capital lock for mutual exclusion"
+        ],
+        "files_touched": [
+            "control/api.py",
+            "runner/momentum.py",
+            "runner/basis.py",
+            "runner/riskd.py",
+            "storage/models.py"
+        ],
+        "commands": [
+            "curl -X POST http://localhost:9001/pause",
+            "curl http://localhost:9001/status"
+        ],
+        "tests": [
+            "Given the bot is running normally, When a `/pause` command is\n    received, Then the bot stops taking new positions and any open position is\n    closed (drained) promptly.",
+            "Given the bot is paused, When a `/resume` command is received and\n    capital lock is free, Then the bot resumes trading (state ACTIVE).",
+            "Given a position is open, When call `/close_all`, Then all active\n    positions are closed immediately and the bot remains in active or paused\n    state as before.",
+            "Given the bot is in paper mode, When `/mode?set=live` is called, Then\n    subsequent orders go to real exchange (verified by actual API call or testnet\n    trade)."
+        ]
     },
     {
-    "title": "Implement market data feed (WebSocket and funding rates)",
-    "body": "- [ ] Desarrollar servicio de datos de mercado en `runner/
-    marketdata.py` que utilice `datafeed/market_ws.py` y `datafeed/funding.py`\n-
-    [ ] Conectarse al WebSocket de Binance para obtener precios en vivo (ticker o
-    klines 15m/1h) de SYMBOLS configurados; reconectar automáticamente si se
-    pierde la conexión\n- [ ] Publicar los datos de precios/velas vía Redis (pub/
-    sub), por ejemplo en canales `price:<symbol>` o similar, para que los bots
-    los consuman\n- [ ] Programar la obtención de tasas de funding cada 5
-    minutos; publicar o almacenar el último funding en Redis (clave
-    `funding:<symbol>`) y calcular percentiles 30d si está habilitado\n- [ ]
-    Implementar ventana de no-trading alrededor del horario de funding: el feed
-    puede emitir una señal o marcar un flag en Redis durante
-    ±`NO_TRADE_FUNDING_WINDOW_S`\n**DoD:** El servicio market-data publica
-    actualizaciones frecuentes (ej. último precio o candle) en Redis; los bots
-    reciben estas actualizaciones en tiempo real. Si el WS se desconecta,
-    reconecta en <60s. Las tasas de funding se actualizan cada 5min y están
-    disponibles; si se habilitan percentiles, se calculan correctamente (p.ej.
-    percentil 40/60). Durante los 2 minutos alrededor del funding, se indica a
-    los bots que no abran nuevas operaciones.",
-    "labels": [
-    "infra",
-    "obs"
-    ],
-    "priority": "P0",
-    "estimate_hours": 4,
-    "depends_on": [
-    "Implement exchange abstraction and utilities"
-    ],
-    "files_touched": [
-    "datafeed/market_ws.py",
-    "datafeed/funding.py",
-    "runner/marketdata.py",
-    "common/exchange.py"
-    ],
-    "commands": [
-    "python runner/marketdata.py",
-    39"redis-cli SUBSCRIBE price:BTCUSDT"
-    ],
-    "tests": [
-    "Given an internet connection, When starting the market data service,
-    Then it subscribes to Binance streams for all configured symbols and starts
-    publishing price updates to Redis.",
-    "Given a network interruption, When the WebSocket disconnects, Then the
-    service reconnects within the allowed downtime and continues publishing
-    data.",
-    "Given the funding API returns an error once, When fetching funding,
-    Then the service uses the last known funding value (if <30min old) until next
-    successful fetch, without crashing."
-    ]
+        "title": "Implement market data feed (WebSocket and funding rates)",
+        "body": "- [ ] Desarrollar servicio de datos de mercado en `runner/\n    marketdata.py` que utilice `datafeed/market_ws.py` y `datafeed/funding.py`\n-\n    [ ] Conectarse al WebSocket de Binance para obtener precios en vivo (ticker o\n    klines 15m/1h) de SYMBOLS configurados; reconectar autom\u00e1ticamente si se\n    pierde la conexi\u00f3n\n- [ ] Publicar los datos de precios/velas v\u00eda Redis (pub/\n    sub), por ejemplo en canales `price:<symbol>` o similar, para que los bots\n    los consuman\n- [ ] Programar la obtenci\u00f3n de tasas de funding cada 5\n    minutos; publicar o almacenar el \u00faltimo funding en Redis (clave\n    `funding:<symbol>`) y calcular percentiles 30d si est\u00e1 habilitado\n- [ ]\n    Implementar ventana de no-trading alrededor del horario de funding: el feed\n    puede emitir una se\u00f1al o marcar un flag en Redis durante\n    \u00b1`NO_TRADE_FUNDING_WINDOW_S`\n**DoD:** El servicio market-data publica\n    actualizaciones frecuentes (ej. \u00faltimo precio o candle) en Redis; los bots\n    reciben estas actualizaciones en tiempo real. Si el WS se desconecta,\n    reconecta en <60s. Las tasas de funding se actualizan cada 5min y est\u00e1n\n    disponibles; si se habilitan percentiles, se calculan correctamente (p.ej.\n    percentil 40/60). Durante los 2 minutos alrededor del funding, se indica a\n    los bots que no abran nuevas operaciones.",
+        "labels": [
+            "infra",
+            "obs"
+        ],
+        "priority": "P0",
+        "estimate_hours": 4,
+        "depends_on": [
+            "Implement exchange abstraction and utilities"
+        ],
+        "files_touched": [
+            "datafeed/market_ws.py",
+            "datafeed/funding.py",
+            "runner/marketdata.py",
+            "common/exchange.py"
+        ],
+        "commands": [
+            "python runner/marketdata.py",
+            "redis-cli SUBSCRIBE price:BTCUSDT"
+        ],
+        "tests": [
+            "Given an internet connection, When starting the market data service,\n    Then it subscribes to Binance streams for all configured symbols and starts\n    publishing price updates to Redis.",
+            "Given a network interruption, When the WebSocket disconnects, Then the\n    service reconnects within the allowed downtime and continues publishing\n    data.",
+            "Given the funding API returns an error once, When fetching funding,\n    Then the service uses the last known funding value (if <30min old) until next\n    successful fetch, without crashing."
+        ]
     },
     {
-    "title": "Implement momentum strategy indicators and signal logic",
-    "body": "- [ ] Implementar cálculo de indicadores para momentum: EMA
-    rápida (ej. 50) y lenta (200), ATR (p. ej. 14) y ADX en el marco temporal
-    principal (TF_PRIMARY)\n- [ ] Usar datos históricos (backfill con ccxt) para
-    inicializar las EMA/ATR/ADX al iniciar; luego actualizar con cada nuevo
-    candle\n- [ ] Definir reglas de señal: señal LONG si EMA rápida cruza sobre
-    EMA lenta (tendencia alcista) con ADX >= ADX_MIN y ATR% >= ATR_MIN_PCT; señal
-    SHORT inversa\n- [ ] Aplicar filtro de funding: descartar señal LONG si
-    funding actual > FUNDING_LONG_MAX (o > percentil LONG_MAX_PCTL si
-    USE_FUNDING_PERCENTILES); descartar SHORT si funding < FUNDING_SHORT_MIN (o <
-    percentil SHORT_MIN_PCTL)\n- [ ] Evitar nuevas señales durante la ventana de
-    no-trade (±NO_TRADE_FUNDING_WINDOW_S) con respecto al próximo timestamp de
-    funding\n- [ ] Calcular tamaño de posición según riesgo: size = (Equity *
-    RISK_PCT_PER_TRADE) / (ATR_STOP_MULT * ATR en $) para que la pérdida en stop
-    = riesgo% del capital\n- [ ] Salida de la función de estrategia: indicar
-    acción (LONG, SHORT, CLOSE, NONE) y parámetros como tamaño y precios de stop/
-    TP sugeridos\n**DoD:** Dado un historial de precios donde EMA50 cruza por
-    encima de EMA200 con ADX=25 y ATR% suficiente, la estrategia retorna señal
-    LONG (y viceversa para SHORT). Las señales se ajustan acorde al funding (ej.,
-    si funding>0, no se genera LONG). No se generan señales durante los 2 min
-    alrededor del horario de funding. El tamaño de la orden corresponde a ~1% del
-    capital de riesgo con el stop previsto.",
-    "labels": [
-    "estrategia"
-    ],
-    "priority": "P0",
-    "estimate_hours": 4,
-    "depends_on": [
-    "Implement market data feed (WebSocket and funding rates)"
-    ],
-    "files_touched": [
-    "momentum/strategy.py",
-    "datafeed/funding.py",
-    "common/exchange.py"
-    ],
-    40"commands": [
-    "pytest tests/test_momentum_strategy.py -v"
-    ],
-    "tests": [
-    "Given a price series where EMA(50) crosses above EMA(200) and ADX is
-    30, When evaluating the strategy, Then a LONG signal is returned if ATR%
-    exceeds the threshold and funding conditions allow.",
-    "Given ATR% is below the minimum threshold, When indicators otherwise
-    meet LONG criteria, Then the strategy outputs no trade (NONE).",
-    "Given funding rate is positive and USE_FUNDING_PERCENTILES=false, When a
-    LONG signal condition occurs, Then the signal is filtered out (no trade due
-    to funding filter).",
-    "Given current time is within 2 minutes of a funding timestamp, When a
-    signal would normally trigger, Then the strategy suppresses the signal."
-    ]
+        "title": "Implement momentum strategy indicators and signal logic",
+        "body": "- [ ] Implementar c\u00e1lculo de indicadores para momentum: EMA\n    r\u00e1pida (ej. 50) y lenta (200), ATR (p. ej. 14) y ADX en el marco temporal\n    principal (TF_PRIMARY)\n- [ ] Usar datos hist\u00f3ricos (backfill con ccxt) para\n    inicializar las EMA/ATR/ADX al iniciar; luego actualizar con cada nuevo\n    candle\n- [ ] Definir reglas de se\u00f1al: se\u00f1al LONG si EMA r\u00e1pida cruza sobre\n    EMA lenta (tendencia alcista) con ADX >= ADX_MIN y ATR% >= ATR_MIN_PCT; se\u00f1al\n    SHORT inversa\n- [ ] Aplicar filtro de funding: descartar se\u00f1al LONG si\n    funding actual > FUNDING_LONG_MAX (o > percentil LONG_MAX_PCTL si\n    USE_FUNDING_PERCENTILES); descartar SHORT si funding < FUNDING_SHORT_MIN (o <\n    percentil SHORT_MIN_PCTL)\n- [ ] Evitar nuevas se\u00f1ales durante la ventana de\n    no-trade (\u00b1NO_TRADE_FUNDING_WINDOW_S) con respecto al pr\u00f3ximo timestamp de\n    funding\n- [ ] Calcular tama\u00f1o de posici\u00f3n seg\u00fan riesgo: size = (Equity *\n    RISK_PCT_PER_TRADE) / (ATR_STOP_MULT * ATR en $) para que la p\u00e9rdida en stop\n    = riesgo% del capital\n- [ ] Salida de la funci\u00f3n de estrategia: indicar\n    acci\u00f3n (LONG, SHORT, CLOSE, NONE) y par\u00e1metros como tama\u00f1o y precios de stop/\n    TP sugeridos\n**DoD:** Dado un historial de precios donde EMA50 cruza por\n    encima de EMA200 con ADX=25 y ATR% suficiente, la estrategia retorna se\u00f1al\n    LONG (y viceversa para SHORT). Las se\u00f1ales se ajustan acorde al funding (ej.,\n    si funding>0, no se genera LONG). No se generan se\u00f1ales durante los 2 min\n    alrededor del horario de funding. El tama\u00f1o de la orden corresponde a ~1% del\n    capital de riesgo con el stop previsto.",
+        "labels": [
+            "estrategia"
+        ],
+        "priority": "P0",
+        "estimate_hours": 4,
+        "depends_on": [
+            "Implement market data feed (WebSocket and funding rates)"
+        ],
+        "files_touched": [
+            "momentum/strategy.py",
+            "datafeed/funding.py",
+            "common/exchange.py"
+        ],
+        "commands": [
+            "pytest tests/test_momentum_strategy.py -v"
+        ],
+        "tests": [
+            "Given a price series where EMA(50) crosses above EMA(200) and ADX is\n, When evaluating the strategy, Then a LONG signal is returned if ATR%\n    exceeds the threshold and funding conditions allow.",
+            "Given ATR% is below the minimum threshold, When indicators otherwise\n    meet LONG criteria, Then the strategy outputs no trade (NONE).",
+            "Given funding rate is positive and USE_FUNDING_PERCENTILES=false, When a\n    LONG signal condition occurs, Then the signal is filtered out (no trade due\n    to funding filter).",
+            "Given current time is within 2 minutes of a funding timestamp, When a\n    signal would normally trigger, Then the strategy suppresses the signal."
+        ]
     },
     {
-    "title": "Implement momentum trade execution and management",
-    "body": "- [ ] Implementar el ejecutor de órdenes para la estrategia
-    Momentum: al recibir señal LONG/SHORT, enviar orden de entrada (market) y
-    órdenes de salida\n- [ ] Calcular la cantidad (qty) según estrategia y
-    redondear con utilidades del exchange; aplicar límite de deslizamiento: si la
-    ejecución se desvía >0.2%, cancelar y reintentar una vez\n- [ ] Colocar stop-
-    loss inicial (orden STOP_MARKET reduce-only) a precio de entrada ±
-    ATR_STOP_MULT * ATR; opcionalmente colocar un TP (reduce-only limit) si se
-    desea (puede omitirse en favor de trailing)\n- [ ] Implementar trailing stop
-    manual: monitorear el máximo/minimo alcanzado; cuando el precio se mueve a
-    favor >= ATR_TRAIL_MULT * ATR desde entrada, ajustar el stop-loss hacia
-    arriba/abajo para asegurar ganancias\n- [ ] Garantizar 1 posición por
-    símbolo: si ya hay posición abierta en el par, ignorar nuevas señales o
-    cerrar/reversar según convenga (por simplicidad, no abrir nueva hasta cerrar
-    la anterior)\n- [ ] Si la señal es opuesta a la posición actual (ej. estaba
-    LONG y llega señal SHORT fuerte), opcionalmente cerrar la posición actual (o
-    dejar que el stop la cierre)\n- [ ] Implementar seguimiento de pérdidas
-    consecutivas: contar stops ejecutados; si llegan a LOSS_STREAK_LIMIT, pausar
-    el bot\n- [ ] Monitorear P&L diario (ledger): si pnl_día <= DAILY_MAX_DD,
-    pausar el bot automáticamente\n- [ ] Antes de cada nueva orden, verificar
-    skew de tiempo local vs servidor (< TIME_SYNC_SKEW_MS) y latencia de la orden
-    previa; si exceden umbral, pausar trading (posible problema de relój o red)
-    \n- [ ] Si el bot pierde el lock de capital en runtime, ejecutar `drain`:
-    cerrar todas las posiciones activas con órdenes reduce-only y pasar a
-    PAUSED\n**DoD:** En una señal LONG generada, el bot abre una posición (orden
-    ejecutada correctamente, con stop-loss colocado). Si el precio sube
-    suficientemente, el stop-loss se ajusta (trailing) para asegurar profit. Si
-    se encadenan 3 trades con stop (pérdidas), el bot se pausa automáticamente.
-    El daily drawdown de -5% también dispara pausa. Las órdenes incluyen IDs
-    únicos por grupo para evitar duplicados en reintento.",
-    "labels": [
-    "estrategia",
-    "riesgo"
-    41],
-    "priority": "P0",
-    "estimate_hours": 4,
-    "depends_on": [
-    "Implement momentum strategy indicators and signal logic",
-    "Implement exchange abstraction and utilities"
-    ],
-    "files_touched": [
-    "momentum/executor.py",
-    "common/exchange.py",
-    "common/locks.py",
-    "storage/db.py",
-    "metrics/server.py"
-    ],
-    "commands": [
-    "pytest tests/test_momentum_execution.py -v"
-    ],
-    "tests": [
-    "Given a LONG signal from strategy, When executor processes it, Then a
-    market buy order is placed and a stop-loss order is placed at the correct
-    ATR-based price.",
-    "Given a filled entry, When price rises by more than ATR_TRAIL_MULT *
-    ATR, Then the stop-loss is moved up accordingly (trailing stop active).",
-    "Given three consecutive trades hit their stop-loss, When the third
-    stop occurs, Then the bot transitions to PAUSED state automatically.",
-    "Given an order execution experiences high latency or time skew beyond
-    limits, Then the bot pauses trading and alerts (no further orders sent).",
-    "Given the capital lock is lost while a position is open, When
-    detected, Then the bot closes the position (reduce-only) and enters PAUSED
-    state, emitting a drained event."
-    ]
+        "title": "Implement momentum trade execution and management",
+        "body": "- [ ] Implementar el ejecutor de \u00f3rdenes para la estrategia\n    Momentum: al recibir se\u00f1al LONG/SHORT, enviar orden de entrada (market) y\n    \u00f3rdenes de salida\n- [ ] Calcular la cantidad (qty) seg\u00fan estrategia y\n    redondear con utilidades del exchange; aplicar l\u00edmite de deslizamiento: si la\n    ejecuci\u00f3n se desv\u00eda >0.2%, cancelar y reintentar una vez\n- [ ] Colocar stop-\n    loss inicial (orden STOP_MARKET reduce-only) a precio de entrada \u00b1\n    ATR_STOP_MULT * ATR; opcionalmente colocar un TP (reduce-only limit) si se\n    desea (puede omitirse en favor de trailing)\n- [ ] Implementar trailing stop\n    manual: monitorear el m\u00e1ximo/minimo alcanzado; cuando el precio se mueve a\n    favor >= ATR_TRAIL_MULT * ATR desde entrada, ajustar el stop-loss hacia\n    arriba/abajo para asegurar ganancias\n- [ ] Garantizar 1 posici\u00f3n por\n    s\u00edmbolo: si ya hay posici\u00f3n abierta en el par, ignorar nuevas se\u00f1ales o\n    cerrar/reversar seg\u00fan convenga (por simplicidad, no abrir nueva hasta cerrar\n    la anterior)\n- [ ] Si la se\u00f1al es opuesta a la posici\u00f3n actual (ej. estaba\n    LONG y llega se\u00f1al SHORT fuerte), opcionalmente cerrar la posici\u00f3n actual (o\n    dejar que el stop la cierre)\n- [ ] Implementar seguimiento de p\u00e9rdidas\n    consecutivas: contar stops ejecutados; si llegan a LOSS_STREAK_LIMIT, pausar\n    el bot\n- [ ] Monitorear P&L diario (ledger): si pnl_d\u00eda <= DAILY_MAX_DD,\n    pausar el bot autom\u00e1ticamente\n- [ ] Antes de cada nueva orden, verificar\n    skew de tiempo local vs servidor (< TIME_SYNC_SKEW_MS) y latencia de la orden\n    previa; si exceden umbral, pausar trading (posible problema de rel\u00f3j o red)\n    \n- [ ] Si el bot pierde el lock de capital en runtime, ejecutar `drain`:\n    cerrar todas las posiciones activas con \u00f3rdenes reduce-only y pasar a\n    PAUSED\n**DoD:** En una se\u00f1al LONG generada, el bot abre una posici\u00f3n (orden\n    ejecutada correctamente, con stop-loss colocado). Si el precio sube\n    suficientemente, el stop-loss se ajusta (trailing) para asegurar profit. Si\n    se encadenan 3 trades con stop (p\u00e9rdidas), el bot se pausa autom\u00e1ticamente.\n    El daily drawdown de -5% tambi\u00e9n dispara pausa. Las \u00f3rdenes incluyen IDs\n    \u00fanicos por grupo para evitar duplicados en reintento.",
+        "labels": [
+            "estrategia",
+            "riesgo"
+        ],
+        "priority": "P0",
+        "estimate_hours": 4,
+        "depends_on": [
+            "Implement momentum strategy indicators and signal logic",
+            "Implement exchange abstraction and utilities"
+        ],
+        "files_touched": [
+            "momentum/executor.py",
+            "common/exchange.py",
+            "common/locks.py",
+            "storage/db.py",
+            "metrics/server.py"
+        ],
+        "commands": [
+            "pytest tests/test_momentum_execution.py -v"
+        ],
+        "tests": [
+            "Given a LONG signal from strategy, When executor processes it, Then a\n    market buy order is placed and a stop-loss order is placed at the correct\n    ATR-based price.",
+            "Given a filled entry, When price rises by more than ATR_TRAIL_MULT *\n    ATR, Then the stop-loss is moved up accordingly (trailing stop active).",
+            "Given three consecutive trades hit their stop-loss, When the third\n    stop occurs, Then the bot transitions to PAUSED state automatically.",
+            "Given an order execution experiences high latency or time skew beyond\n    limits, Then the bot pauses trading and alerts (no further orders sent).",
+            "Given the capital lock is lost while a position is open, When\n    detected, Then the bot closes the position (reduce-only) and enters PAUSED\n    state, emitting a drained event."
+        ]
     },
     {
-    "title": "Implement basis strategy signal and calculation",
-    "body": "- [ ] Obtener símbolo del futuro trimestral actual para cada
-    activo (ej: BTCUSD_<expiry>) usando la API de exchange o mapeo\n- [ ]
-    Calcular días hasta expiración del futuro y, con precios actual de perp y
-    futuro, calcular la base anualizada: `basis = ((fut_price/perp_price) - 1) *
-    (365/days_to_expiry)`\n- [ ] Definir condiciones de entrada: si `basis >
-    BASIS_UPPER` (ej >10%), generar señal ShortBasis; si `basis < BASIS_LOWER`
-    (<0%), señal LongBasis; si no, ninguna\n- [ ] No abrir posiciones si faltan <
-    BASIS_CLOSE_DAYS_BEFORE días para expiración (evitar entrar cerca del
-    vencimiento)\n- [ ] Determinar valores de take-profit y stop-loss en términos
-    de base: TP objetivo alrededor de 0%–4% (p.ej. 2% por defecto) y SL si la
-    base se mueve ±BASIS_SL (5 puntos) en contra desde la entrada\n- [ ] Retornar
-    señal de estrategia con tipo (LONG_BASIS, SHORT_BASIS, NONE) e incluir basis
-    actual y umbrales para que el ejecutor pueda tomar acciones\n**DoD:** Si la
-    base BTC está en 12%, la estrategia indica ShortBasis. Si la base ETH está en
-    -2%, indica LongBasis. No se generan señales si el futuro vence en <5 días.
-    Para un ShortBasis con entrada 12%, se esperan objetivos de cierre cuando la
-    base caiga ~2–4% o stops si sube ~5% sobre la entrada.",
-    42"labels": [
-    "estrategia"
-    ],
-    "priority": "P1",
-    "estimate_hours": 3,
-    "depends_on": [
-    "Implement exchange abstraction and utilities",
-    "Implement market data feed (WebSocket and funding rates)"
-    ],
-    "files_touched": [
-    "basis/calc.py",
-    "common/exchange.py"
-    ],
-    "commands": [
-    "pytest tests/test_basis_calc.py -v"
-    ],
-    "tests": [
-    "Given perp and future prices such that basis = 12%, When calculating,
-    Then a ShortBasis signal is generated.",
-    "Given basis = -1%, When calculating, Then a LongBasis signal is
-    generated.",
-    "Given 3 days to expiry and basis > 10%, When calculating, Then no
-    signal is generated (entry blocked due to imminent expiry).",
-    "Given an open ShortBasis trade at basis 12%, When current basis drops
-    to 2%, Then a condition to take profit is identified."
-    ]
+        "title": "Implement basis strategy signal and calculation",
+        "body": "- [ ] Obtener s\u00edmbolo del futuro trimestral actual para cada\n    activo (ej: BTCUSD_<expiry>) usando la API de exchange o mapeo\n- [ ]\n    Calcular d\u00edas hasta expiraci\u00f3n del futuro y, con precios actual de perp y\n    futuro, calcular la base anualizada: `basis = ((fut_price/perp_price) - 1) *\n    (365/days_to_expiry)`\n- [ ] Definir condiciones de entrada: si `basis >\n    BASIS_UPPER` (ej >10%), generar se\u00f1al ShortBasis; si `basis < BASIS_LOWER`\n    (<0%), se\u00f1al LongBasis; si no, ninguna\n- [ ] No abrir posiciones si faltan <\n    BASIS_CLOSE_DAYS_BEFORE d\u00edas para expiraci\u00f3n (evitar entrar cerca del\n    vencimiento)\n- [ ] Determinar valores de take-profit y stop-loss en t\u00e9rminos\n    de base: TP objetivo alrededor de 0%\u20134% (p.ej. 2% por defecto) y SL si la\n    base se mueve \u00b1BASIS_SL (5 puntos) en contra desde la entrada\n- [ ] Retornar\n    se\u00f1al de estrategia con tipo (LONG_BASIS, SHORT_BASIS, NONE) e incluir basis\n    actual y umbrales para que el ejecutor pueda tomar acciones\n**DoD:** Si la\n    base BTC est\u00e1 en 12%, la estrategia indica ShortBasis. Si la base ETH est\u00e1 en\n    -2%, indica LongBasis. No se generan se\u00f1ales si el futuro vence en <5 d\u00edas.\n    Para un ShortBasis con entrada 12%, se esperan objetivos de cierre cuando la\n    base caiga ~2\u20134% o stops si sube ~5% sobre la entrada.",
+        "labels": [
+            "estrategia"
+        ],
+        "priority": "P1",
+        "estimate_hours": 3,
+        "depends_on": [
+            "Implement exchange abstraction and utilities",
+            "Implement market data feed (WebSocket and funding rates)"
+        ],
+        "files_touched": [
+            "basis/calc.py",
+            "common/exchange.py"
+        ],
+        "commands": [
+            "pytest tests/test_basis_calc.py -v"
+        ],
+        "tests": [
+            "Given perp and future prices such that basis = 12%, When calculating,\n    Then a ShortBasis signal is generated.",
+            "Given basis = -1%, When calculating, Then a LongBasis signal is\n    generated.",
+            "Given 3 days to expiry and basis > 10%, When calculating, Then no\n    signal is generated (entry blocked due to imminent expiry).",
+            "Given an open ShortBasis trade at basis 12%, When current basis drops\n    to 2%, Then a condition to take profit is identified."
+        ]
     },
     {
-    "title": "Implement basis trade execution and management",
-    "body": "- [ ] Implementar la ejecución de la estrategia Basis en dos
-    piernas: al recibir señal ShortBasis, colocar orden de venta del futuro
-    trimestral y orden de compra del perp equivalente (LongBasis viceversa)\n-
-    [ ] Calcular el tamaño de posición para que un movimiento adverso de BASIS_SL
-    (~5 puntos de base) implique ~RISK_PCT_PER_TRADE del capital en pérdida (ej:
-    asignar notional ~20% capital para que 5% base ≈ 1% equity)\n- [ ] Establecer
-    margen aislado y leverage 3x en ambos mercados antes de abrir posición
-    (Binance: ajustar marginType a ISOLATED y leverage)\n- [ ] Enviar órdenes de
-    entrada en ambos mercados (preferiblemente MARKET); si en 2s no se llenan
-    ~100%, cancelar órdenes y revertir (rollback): cerrar cualquier llenado
-    parcial en la otra pierna\n- [ ] Tras apertura exitosa, monitorear la base
-    calculada cada 60s:\n
-    - Si la base alcanza el objetivo TP (<= BASIS_TP para
-    ShortBasis, >= BASIS_TP para LongBasis, cercano a convergencia), cerrar ambas
-    piernas para tomar ganancia\n
-    - Si la base se mueve en contra y excede el
-    umbral de SL desde la entrada, cerrar ambas piernas cortando la pérdida\n-
-    [ ] Cerrar la posición antes de BASI S_CLOSE_DAYS_BEFORE del vencimiento si
-    sigue abierta (evitar liquidación)\n- [ ] Registrar en `ledger` el P&L de la
-    operación al cierre, incluyendo las fees y el funding neto acumulado del perp
-    durante la operación (si LOG_REALIZED_FUNDING=true)\n**DoD:** Al activar una
-    señal ShortBasis, el bot abre posiciones equivalentes: vendido en futuro,
-    comprado en perp. Si solo una orden se ejecuta parcialmente, se cancela todo
-    y no queda posición neta. Con una posición abierta, cuando la base baja al 2%
-    43se cierran ambas piernas con ganancia; si sube al ~17% (5% sobre entrada
-    12%), se cierran con pérdida. Las posiciones se cierran automáticamente 5
-    días antes del expiry si siguen abiertas. El ledger registra la PnL de la
-    operación y cualquier funding pagado/recibido en el perp.",
-    "labels": [
-    "estrategia",
-    "riesgo"
-    ],
-    "priority": "P1",
-    "estimate_hours": 4,
-    "depends_on": [
-    "Implement basis strategy signal and calculation",
-    "Implement exchange abstraction and utilities"
-    ],
-    "files_touched": [
-    "basis/executor.py",
-    "common/exchange.py",
-    "storage/db.py",
-    "metrics/server.py"
-    ],
-    "commands": [
-    "pytest tests/test_basis_execution.py -v"
-    ],
-    "tests": [
-    "Given a ShortBasis signal, When executed, Then both a sell order for
-    future and a buy order for perp are placed, each with isolated margin and 3x
-    leverage.",
-    "Given one leg fills and the other remains unfilled after 2s, Then the
-    filled leg is closed and no open position remains (rollback successful).",
-    "Given an open ShortBasis position, When basis drops to target
-    threshold, Then both legs are closed and a profit entry is logged in the
-    ledger (including any funding earned or paid).",
-    "Given an open LongBasis position near expiry (<=5 days), Then the bot
-    closes both legs before settlement.",
-    "Verify that after closing a basis trade, the ledger contains an entry
-    with realized PnL and funding received/paid."
-    ]
+        "title": "Implement basis trade execution and management",
+        "body": "- [ ] Implementar la ejecuci\u00f3n de la estrategia Basis en dos\n    piernas: al recibir se\u00f1al ShortBasis, colocar orden de venta del futuro\n    trimestral y orden de compra del perp equivalente (LongBasis viceversa)\n-\n    [ ] Calcular el tama\u00f1o de posici\u00f3n para que un movimiento adverso de BASIS_SL\n    (~5 puntos de base) implique ~RISK_PCT_PER_TRADE del capital en p\u00e9rdida (ej:\n    asignar notional ~20% capital para que 5% base \u2248 1% equity)\n- [ ] Establecer\n    margen aislado y leverage 3x en ambos mercados antes de abrir posici\u00f3n\n    (Binance: ajustar marginType a ISOLATED y leverage)\n- [ ] Enviar \u00f3rdenes de\n    entrada en ambos mercados (preferiblemente MARKET); si en 2s no se llenan\n    ~100%, cancelar \u00f3rdenes y revertir (rollback): cerrar cualquier llenado\n    parcial en la otra pierna\n- [ ] Tras apertura exitosa, monitorear la base\n    calculada cada 60s:\n\n    - Si la base alcanza el objetivo TP (<= BASIS_TP para\n    ShortBasis, >= BASIS_TP para LongBasis, cercano a convergencia), cerrar ambas\n    piernas para tomar ganancia\n\n    - Si la base se mueve en contra y excede el\n    umbral de SL desde la entrada, cerrar ambas piernas cortando la p\u00e9rdida\n-\n    [ ] Cerrar la posici\u00f3n antes de BASI S_CLOSE_DAYS_BEFORE del vencimiento si\n    sigue abierta (evitar liquidaci\u00f3n)\n- [ ] Registrar en `ledger` el P&L de la\n    operaci\u00f3n al cierre, incluyendo las fees y el funding neto acumulado del perp\n    durante la operaci\u00f3n (si LOG_REALIZED_FUNDING=true)\n**DoD:** Al activar una\n    se\u00f1al ShortBasis, el bot abre posiciones equivalentes: vendido en futuro,\n    comprado en perp. Si solo una orden se ejecuta parcialmente, se cancela todo\n    y no queda posici\u00f3n neta. Con una posici\u00f3n abierta, cuando la base baja al 2%\nse cierran ambas piernas con ganancia; si sube al ~17% (5% sobre entrada\n%), se cierran con p\u00e9rdida. Las posiciones se cierran autom\u00e1ticamente 5\n    d\u00edas antes del expiry si siguen abiertas. El ledger registra la PnL de la\n    operaci\u00f3n y cualquier funding pagado/recibido en el perp.",
+        "labels": [
+            "estrategia",
+            "riesgo"
+        ],
+        "priority": "P1",
+        "estimate_hours": 4,
+        "depends_on": [
+            "Implement basis strategy signal and calculation",
+            "Implement exchange abstraction and utilities"
+        ],
+        "files_touched": [
+            "basis/executor.py",
+            "common/exchange.py",
+            "storage/db.py",
+            "metrics/server.py"
+        ],
+        "commands": [
+            "pytest tests/test_basis_execution.py -v"
+        ],
+        "tests": [
+            "Given a ShortBasis signal, When executed, Then both a sell order for\n    future and a buy order for perp are placed, each with isolated margin and 3x\n    leverage.",
+            "Given one leg fills and the other remains unfilled after 2s, Then the\n    filled leg is closed and no open position remains (rollback successful).",
+            "Given an open ShortBasis position, When basis drops to target\n    threshold, Then both legs are closed and a profit entry is logged in the\n    ledger (including any funding earned or paid).",
+            "Given an open LongBasis position near expiry (<=5 days), Then the bot\n    closes both legs before settlement.",
+            "Verify that after closing a basis trade, the ledger contains an entry\n    with realized PnL and funding received/paid."
+        ]
     },
     {
-    "title": "Implement global risk management daemon",
-    "body": "- [ ] Desplegar un proceso separado (risk-daemon en `runner/
-    riskd.py`) que monitoree continuamente los riesgos globales y la salud del
-    sistema\n- [ ] Revisar métricas o estado de bots (vía `/status` o DB):
-    calcular PnL diario acumulado, detectar streak de pérdidas, uso de margen,
-    etc.\n- [ ] Suscribirse a eventos clave en Redis (ej: stream `events`) para
-    enterarse de `drained` u otros triggers de bots\n- [ ] Detectar condiciones y
-    actuar:\n
-    - Si PnL diario <= DAILY_MAX_DD o pérdidas consecutivas >=
-    LOSS_STREAK_LIMIT: invocar `/pause` en ambos bots y enviar alerta
-    Telegram\n
-    - Si el feed de mercado no publica datos por >
-    WS_MAX_DOWNTIME_S: pausar bots y alertar (evitar trading a ciegas)\n
-    - Si
-    latencia de órdenes supera ORDER_LATENCY_MAX_MS consistentemente o skew de
-    44tiempo > TIME_SYNC_SKEW_MS: pausar bots y alertar (posible problema red/
-    tiempo)\n
-    - Si ratio de margen libre global < MARGIN_BUFFER_MIN (25%):
-    pausar bots y posiblemente instruir cierre de posiciones para proteger
-    capital\n- [ ] Enviar notificaciones vía Telegram para cada evento de pausa/
-    alerta con detalles (motivo, bot afectado)\n- [ ] Exponer endpoint `/healthz`
-    en riskd para monitor básico\n**DoD:** En condiciones simuladas (por ej.
-    introducir manualmente un PnL diario de -6% en la DB o un contador de 3 stops
-    seguidos), el risk-daemon pausa todos los bots y envía un mensaje de alerta
-    \"Trading paused: daily drawdown -6%\". Si el feed de datos se detiene >60s,
-    los bots se pausan. Se comprueba que el risk-daemon puede llamar a los
-    endpoints de los bots (usando nombres de servicio en Docker) para pausar/
-    reanudar según sea necesario.",
-    "labels": [
-    "riesgo",
-    "obs"
-    ],
-    "priority": "P1",
-    "estimate_hours": 3,
-    "depends_on": [
-    "Implement momentum trade execution and management",
-    "Implement basis trade execution and management",
-    "Implement HTTP control API for bot management"
-    ],
-    "files_touched": [
-    "riskd/guard.py",
-    "runner/riskd.py",
-    "common/locks.py"
-    ],
-    "commands": [
-    "pytest tests/test_risk_daemon.py -v"
-    ],
-    "tests": [
-    "Given three consecutive stop-out events in a bot, When risk daemon
-    observes loss_streak>=3, Then it sends pause command to that bot and Telegram
-    alert is sent.",
-    "Given daily PnL falls below -5%, When risk daemon checks daily PnL,
-    Then it pauses all trading and sends an alert.",
-    "Given market data feed stops sending updates for >60s, When risk
-    daemon detects this, Then it pauses both bots and alerts.",
-    "Given a high order latency event is recorded, When risk daemon
-    processes it, Then trading is halted and an alert is sent.",
-    "Given margin ratio falls below 20%, When risk daemon checks account
-    status, Then it triggers closure of positions (via bots or directly) and
-    alerts the user."
-    ]
+        "title": "Implement global risk management daemon",
+        "body": "- [ ] Desplegar un proceso separado (risk-daemon en `runner/\n    riskd.py`) que monitoree continuamente los riesgos globales y la salud del\n    sistema\n- [ ] Revisar m\u00e9tricas o estado de bots (v\u00eda `/status` o DB):\n    calcular PnL diario acumulado, detectar streak de p\u00e9rdidas, uso de margen,\n    etc.\n- [ ] Suscribirse a eventos clave en Redis (ej: stream `events`) para\n    enterarse de `drained` u otros triggers de bots\n- [ ] Detectar condiciones y\n    actuar:\n\n    - Si PnL diario <= DAILY_MAX_DD o p\u00e9rdidas consecutivas >=\n    LOSS_STREAK_LIMIT: invocar `/pause` en ambos bots y enviar alerta\n    Telegram\n\n    - Si el feed de mercado no publica datos por >\n    WS_MAX_DOWNTIME_S: pausar bots y alertar (evitar trading a ciegas)\n\n    - Si\n    latencia de \u00f3rdenes supera ORDER_LATENCY_MAX_MS consistentemente o skew de\ntiempo > TIME_SYNC_SKEW_MS: pausar bots y alertar (posible problema red/\n    tiempo)\n\n    - Si ratio de margen libre global < MARGIN_BUFFER_MIN (25%):\n    pausar bots y posiblemente instruir cierre de posiciones para proteger\n    capital\n- [ ] Enviar notificaciones v\u00eda Telegram para cada evento de pausa/\n    alerta con detalles (motivo, bot afectado)\n- [ ] Exponer endpoint `/healthz`\n    en riskd para monitor b\u00e1sico\n**DoD:** En condiciones simuladas (por ej.\n    introducir manualmente un PnL diario de -6% en la DB o un contador de 3 stops\n    seguidos), el risk-daemon pausa todos los bots y env\u00eda un mensaje de alerta\n    \"Trading paused: daily drawdown -6%\". Si el feed de datos se detiene >60s,\n    los bots se pausan. Se comprueba que el risk-daemon puede llamar a los\n    endpoints de los bots (usando nombres de servicio en Docker) para pausar/\n    reanudar seg\u00fan sea necesario.",
+        "labels": [
+            "riesgo",
+            "obs"
+        ],
+        "priority": "P1",
+        "estimate_hours": 3,
+        "depends_on": [
+            "Implement momentum trade execution and management",
+            "Implement basis trade execution and management",
+            "Implement HTTP control API for bot management"
+        ],
+        "files_touched": [
+            "riskd/guard.py",
+            "runner/riskd.py",
+            "common/locks.py"
+        ],
+        "commands": [
+            "pytest tests/test_risk_daemon.py -v"
+        ],
+        "tests": [
+            "Given three consecutive stop-out events in a bot, When risk daemon\n    observes loss_streak>=3, Then it sends pause command to that bot and Telegram\n    alert is sent.",
+            "Given daily PnL falls below -5%, When risk daemon checks daily PnL,\n    Then it pauses all trading and sends an alert.",
+            "Given market data feed stops sending updates for >60s, When risk\n    daemon detects this, Then it pauses both bots and alerts.",
+            "Given a high order latency event is recorded, When risk daemon\n    processes it, Then trading is halted and an alert is sent.",
+            "Given margin ratio falls below 20%, When risk daemon checks account\n    status, Then it triggers closure of positions (via bots or directly) and\n    alerts the user."
+        ]
     },
     {
-    "title": "Implement persistent storage (DuckDB) and data models",
-    "body": "- [ ] Definir el esquema de DuckDB y crear tablas: `orders`,
-    `fills`, `positions`, `ledger`, `metrics` con columnas, tipos y claves
-    primarias apropiadas\n- [ ] Implementar inicialización de la base de datos en
-    45`storage/db.py` (crear tablas si no existen) y funciones para insertar
-    registros:\n
-    - nuevo orden (al colocar una orden enviar registro con id,
-    símbolo, qty, tipo, etc.)\n
-    - fill (al recibir confirmación de trade,
-    guardar precio llenado, fee, etc.)\n
-    - posición (al abrir/cerrar
-    posiciones, guardar tamaño, precio entrada/salida, PnL realizado)\n
-    -
-    ledger (al cerrar una operación, registrar PnL neto y funding, timestamp)\n
-    - métricas (opcional: guardar snapshot de métricas diarias si se requiere
-    histórico)\n- [ ] Crear modelos Pydantic en `storage/models.py` para Order,
-    Fill, Position, LedgerEntry (y estructuras de Status response) para validar
-    datos y usarlos en APIs/respuestas\n- [ ] Asegurar acceso concurrente seguro
-    a DuckDB: las escrituras desde distintos procesos se serializan (p.ej. usando
-    locks o reintentos si DB está bloqueada)\n**DoD:** Al iniciar por primera
-    vez, se crea el archivo de base de datos DuckDB con todas las tablas
-    definidas. Durante operaciones de prueba, se registran ordenes y trades: la
-    tabla orders contiene las órdenes enviadas, fills los ejecutados, positions
-    refleja la posición abierta/cerrada y ledger muestra el PnL de cada trade (y
-    funding si aplica). Consultas manuales a DuckDB confirman los datos (por ej.
-    SELECT * FROM ledger; devuelve los resultados esperados). Los modelos
-    Pydantic garantizan que los datos tengan formato correcto (ej. no permite
-    tipos inválidos).",
-    "labels": [
-    "infra",
-    "devx"
-    ],
-    "priority": "P2",
-    "estimate_hours": 4,
-    "depends_on": [
-    "Implement momentum trade execution and management",
-    "Implement basis trade execution and management"
-    ],
-    "files_touched": [
-    "storage/db.py",
-    "storage/models.py",
-    "momentum/executor.py",
-    "basis/executor.py",
-    "metrics/server.py"
-    ],
-    "commands": [
-    "python -c 'import duckdb; print(duckdb.connect(\"./data/
-    trading.db\").execute(\"SELECT COUNT(*) FROM orders\").fetchall())'"
-    ],
-    "tests": [
-    "Given a new database file, When the system starts, Then all required
-    tables are created successfully in DuckDB.",
-    "Given a trade is executed in paper mode, When it closes, Then an order
-    record, fill record, and ledger entry are inserted with correct data.",
-    "Given concurrent trade events from two bots, When writing to the
-    database, Then no data corruption occurs (all records are present and
-    correct).",
-    46"Given Pydantic models for Order and Position, When invalid data (e.g.,
-    negative quantity) is provided, Then model validation raises an error."
-    ]
+        "title": "Implement persistent storage (DuckDB) and data models",
+        "body": "- [ ] Definir el esquema de DuckDB y crear tablas: `orders`,\n    `fills`, `positions`, `ledger`, `metrics` con columnas, tipos y claves\n    primarias apropiadas\n- [ ] Implementar inicializaci\u00f3n de la base de datos en\n`storage/db.py` (crear tablas si no existen) y funciones para insertar\n    registros:\n\n    - nuevo orden (al colocar una orden enviar registro con id,\n    s\u00edmbolo, qty, tipo, etc.)\n\n    - fill (al recibir confirmaci\u00f3n de trade,\n    guardar precio llenado, fee, etc.)\n\n    - posici\u00f3n (al abrir/cerrar\n    posiciones, guardar tama\u00f1o, precio entrada/salida, PnL realizado)\n\n    -\n    ledger (al cerrar una operaci\u00f3n, registrar PnL neto y funding, timestamp)\n\n    - m\u00e9tricas (opcional: guardar snapshot de m\u00e9tricas diarias si se requiere\n    hist\u00f3rico)\n- [ ] Crear modelos Pydantic en `storage/models.py` para Order,\n    Fill, Position, LedgerEntry (y estructuras de Status response) para validar\n    datos y usarlos en APIs/respuestas\n- [ ] Asegurar acceso concurrente seguro\n    a DuckDB: las escrituras desde distintos procesos se serializan (p.ej. usando\n    locks o reintentos si DB est\u00e1 bloqueada)\n**DoD:** Al iniciar por primera\n    vez, se crea el archivo de base de datos DuckDB con todas las tablas\n    definidas. Durante operaciones de prueba, se registran ordenes y trades: la\n    tabla orders contiene las \u00f3rdenes enviadas, fills los ejecutados, positions\n    refleja la posici\u00f3n abierta/cerrada y ledger muestra el PnL de cada trade (y\n    funding si aplica). Consultas manuales a DuckDB confirman los datos (por ej.\n    SELECT * FROM ledger; devuelve los resultados esperados). Los modelos\n    Pydantic garantizan que los datos tengan formato correcto (ej. no permite\n    tipos inv\u00e1lidos).",
+        "labels": [
+            "infra",
+            "devx"
+        ],
+        "priority": "P2",
+        "estimate_hours": 4,
+        "depends_on": [
+            "Implement momentum trade execution and management",
+            "Implement basis trade execution and management"
+        ],
+        "files_touched": [
+            "storage/db.py",
+            "storage/models.py",
+            "momentum/executor.py",
+            "basis/executor.py",
+            "metrics/server.py"
+        ],
+        "commands": [
+            "python -c 'import duckdb; print(duckdb.connect(\"./data/\n    trading.db\").execute(\"SELECT COUNT(*) FROM orders\").fetchall())'"
+        ],
+        "tests": [
+            "Given a new database file, When the system starts, Then all required\n    tables are created successfully in DuckDB.",
+            "Given a trade is executed in paper mode, When it closes, Then an order\n    record, fill record, and ledger entry are inserted with correct data.",
+            "Given concurrent trade events from two bots, When writing to the\n    database, Then no data corruption occurs (all records are present and\n    correct).",
+            "Given Pydantic models for Order and Position, When invalid data (e.g.,\n    negative quantity) is provided, Then model validation raises an error."
+        ]
     },
     {
-    "title": "Implement metrics exposure and Telegram alerting",
-    "body": "- [ ] Definir e inicializar métricas de Prometheus en `metrics/
-    server.py` (usando `prometheus_client`): contadores/gauges/histogramas para
-    bot_up, order_latency_ms, ws_uptime_s, pnl_day_usdt, winrate_7d, fees_usdt,
-    slip_bps, funding_now_bps, basis_now_pct, margin_ratio,
-    funding_realized_usdt, rejected_orders_count, etc.\n- [ ] Actualizar estas
-    métricas en el código en tiempo real: ejemplo, incrementar contador de
-    órdenes, actualizar pnl_day_usdt tras cada trade, calcular winrate_7d con
-    registros de los últimos 7 días (quizás consultando ledger)\n- [ ] Exponer
-    ruta `/metrics` que devuelva el texto de métricas (formato Prometheus) y `/
-    healthz` que indique estado saludable del proceso\n- [ ] Configurar
-    healthchecks en Docker Compose para que apunten a `/healthz`\n- [ ] Integrar
-    notificaciones de Telegram: usar `python-telegram-bot` para enviar mensajes
-    en eventos clave (pausas de riesgo, reconexiones, etc.). Implementar
-    utilitario o directamente en riskd/guard para enviar
-    `bot.send_message(TELEGRAM_CHAT_ID, text)` con el token configurado\n**DoD:**
-    Accediendo a `/metrics` en cada servicio se observan métricas actualizadas
-    (ej: `bot_up{bot=\"momentum\"} 1`, `pnl_day_usdt` mostrando ganancia o
-    pérdida del día, etc.). Los endpoints `/healthz` responden \"OK\". Durante
-    eventos de prueba (como pausa por drawdown), se envía un mensaje de Telegram
-    al chat configurado informando del evento. Las alertas relevantes (p.ej.
-    \"Loss streak 3, pausing bot\") se reciben correctamente en Telegram.",
-    "labels": [
-    "obs"
-    ],
-    "priority": "P2",
-    "estimate_hours": 3,
-    "depends_on": [
-    "Implement global risk management daemon",
-    "Implement persistent storage (DuckDB) and data models"
-    ],
-    "files_touched": [
-    "metrics/server.py",
-    "riskd/guard.py",
-    "control/api.py",
-    "Dockerfile",
-    "docker-compose.yml"
-    ],
-    "commands": [
-    "curl http://localhost:9001/metrics",
-    "curl http://localhost:9001/healthz"
-    ],
-    "tests": [
-    "Given the bots are running, When querying /metrics, Then the output
-    includes expected metrics with plausible values (no errors).",
-    47"Given the system is healthy, When requesting /healthz, Then it returns HTTP
-    200 with 'OK'.",
-    "Given a pause trigger occurs, When the Telegram bot is configured,
-    Then an alert message is sent to the specified chat ID.",
-    "Given metrics are updated after each trade, When 7 days of trades have
-    occurred, Then winrate_7d reflects the correct ratio of winning trades."
-    ]
+        "title": "Implement metrics exposure and Telegram alerting",
+        "body": "- [ ] Definir e inicializar m\u00e9tricas de Prometheus en `metrics/\n    server.py` (usando `prometheus_client`): contadores/gauges/histogramas para\n    bot_up, order_latency_ms, ws_uptime_s, pnl_day_usdt, winrate_7d, fees_usdt,\n    slip_bps, funding_now_bps, basis_now_pct, margin_ratio,\n    funding_realized_usdt, rejected_orders_count, etc.\n- [ ] Actualizar estas\n    m\u00e9tricas en el c\u00f3digo en tiempo real: ejemplo, incrementar contador de\n    \u00f3rdenes, actualizar pnl_day_usdt tras cada trade, calcular winrate_7d con\n    registros de los \u00faltimos 7 d\u00edas (quiz\u00e1s consultando ledger)\n- [ ] Exponer\n    ruta `/metrics` que devuelva el texto de m\u00e9tricas (formato Prometheus) y `/\n    healthz` que indique estado saludable del proceso\n- [ ] Configurar\n    healthchecks en Docker Compose para que apunten a `/healthz`\n- [ ] Integrar\n    notificaciones de Telegram: usar `python-telegram-bot` para enviar mensajes\n    en eventos clave (pausas de riesgo, reconexiones, etc.). Implementar\n    utilitario o directamente en riskd/guard para enviar\n    `bot.send_message(TELEGRAM_CHAT_ID, text)` con el token configurado\n**DoD:**\n    Accediendo a `/metrics` en cada servicio se observan m\u00e9tricas actualizadas\n    (ej: `bot_up{bot=\"momentum\"} 1`, `pnl_day_usdt` mostrando ganancia o\n    p\u00e9rdida del d\u00eda, etc.). Los endpoints `/healthz` responden \"OK\". Durante\n    eventos de prueba (como pausa por drawdown), se env\u00eda un mensaje de Telegram\n    al chat configurado informando del evento. Las alertas relevantes (p.ej.\n    \"Loss streak 3, pausing bot\") se reciben correctamente en Telegram.",
+        "labels": [
+            "obs"
+        ],
+        "priority": "P2",
+        "estimate_hours": 3,
+        "depends_on": [
+            "Implement global risk management daemon",
+            "Implement persistent storage (DuckDB) and data models"
+        ],
+        "files_touched": [
+            "metrics/server.py",
+            "riskd/guard.py",
+            "control/api.py",
+            "Dockerfile",
+            "docker-compose.yml"
+        ],
+        "commands": [
+            "curl http://localhost:9001/metrics",
+            "curl http://localhost:9001/healthz"
+        ],
+        "tests": [
+            "Given the bots are running, When querying /metrics, Then the output\n    includes expected metrics with plausible values (no errors).",
+            "Given the system is healthy, When requesting /healthz, Then it returns HTTP\n0 with 'OK'.",
+            "Given a pause trigger occurs, When the Telegram bot is configured,\n    Then an alert message is sent to the specified chat ID.",
+            "Given metrics are updated after each trade, When 7 days of trades have\n    occurred, Then winrate_7d reflects the correct ratio of winning trades."
+        ]
     },
     {
-    "title": "Develop comprehensive unit and integration tests (paper mode)",
-    "body": "- [ ] Escribir tests unitarios exhaustivos para módulos clave:
-    exchange (órdenes y reintentos), locks (comportamiento de lock), estrategia
-    momentum y basis (señales correctas), ejecutores (manejo de órdenes,
-    trailing, rollbacks), riskd (disparadores) y almacenamiento (DB ops)\n- [ ]
-    Simular escenarios con datos sintéticos para validar la lógica: ejemplo,
-    serie de precios subida y bajada para probar cruce EMA y stops, secuencia de
-    funding variada para filtros\n- [ ] Mockear interacciones con la API de
-    Binance en tests para no depender de red (usar respuestas simuladas para
-    órdenes, funding, precios)\n- [ ] Implementar tests de integración en modo
-    paper: simular un ciclo completo de operación en ambiente controlado (sin
-    tocar API real) usando modo paper, verificando que el bot abre y cierra
-    posiciones virtualmente y registra PnL esperado\n- [ ] Incluir pruebas de
-    condiciones extremas: reconexión de WS, órdenes parcialmente llenadas,
-    latencia elevada simulada, etc., asegurando que el sistema responde según lo
-    diseñado\n**DoD:** La suite de pruebas (ejecutada con `pytest`) cubre >80%
-    del código, con todos los casos de los módulos principales. Tests unitarios
-    pasan para lógica individual (ej: la función de señal momentum retorna lo
-    esperado en distintos casos). Un test de integración en modo paper simula un
-    trade ganador y uno perdedor, resultando en registros correctos en ledger y
-    métricas actualizadas. No hay regressiones: cada corrección en bug tiene su
-    caso de prueba asociado.",
-    "labels": [
-    "test"
-    ],
-    "priority": "P2",
-    "estimate_hours": 4,
-    "depends_on": [
-    "Implement momentum trade execution and management",
-    "Implement basis trade execution and management",
-    "Implement persistent storage (DuckDB) and data models",
-    "Implement metrics exposure and Telegram alerting"
-    ],
-    "files_touched": [
-    "tests/"
-    ],
-    "commands": [
-    "pytest -v --cov=."
-    ],
-    "tests": [
-    "Given all modules implemented, When running `pytest`, Then all tests
-    48pass with high coverage and no regressions.",
-    "Given a simulated price feed, When running an integration test in
-    paper mode, Then the bot executes a trade cycle correctly and all expected
-    records are created in the database."
-    ]
+        "title": "Develop comprehensive unit and integration tests (paper mode)",
+        "body": "- [ ] Escribir tests unitarios exhaustivos para m\u00f3dulos clave:\n    exchange (\u00f3rdenes y reintentos), locks (comportamiento de lock), estrategia\n    momentum y basis (se\u00f1ales correctas), ejecutores (manejo de \u00f3rdenes,\n    trailing, rollbacks), riskd (disparadores) y almacenamiento (DB ops)\n- [ ]\n    Simular escenarios con datos sint\u00e9ticos para validar la l\u00f3gica: ejemplo,\n    serie de precios subida y bajada para probar cruce EMA y stops, secuencia de\n    funding variada para filtros\n- [ ] Mockear interacciones con la API de\n    Binance en tests para no depender de red (usar respuestas simuladas para\n    \u00f3rdenes, funding, precios)\n- [ ] Implementar tests de integraci\u00f3n en modo\n    paper: simular un ciclo completo de operaci\u00f3n en ambiente controlado (sin\n    tocar API real) usando modo paper, verificando que el bot abre y cierra\n    posiciones virtualmente y registra PnL esperado\n- [ ] Incluir pruebas de\n    condiciones extremas: reconexi\u00f3n de WS, \u00f3rdenes parcialmente llenadas,\n    latencia elevada simulada, etc., asegurando que el sistema responde seg\u00fan lo\n    dise\u00f1ado\n**DoD:** La suite de pruebas (ejecutada con `pytest`) cubre >80%\n    del c\u00f3digo, con todos los casos de los m\u00f3dulos principales. Tests unitarios\n    pasan para l\u00f3gica individual (ej: la funci\u00f3n de se\u00f1al momentum retorna lo\n    esperado en distintos casos). Un test de integraci\u00f3n en modo paper simula un\n    trade ganador y uno perdedor, resultando en registros correctos en ledger y\n    m\u00e9tricas actualizadas. No hay regressiones: cada correcci\u00f3n en bug tiene su\n    caso de prueba asociado.",
+        "labels": [
+            "test"
+        ],
+        "priority": "P2",
+        "estimate_hours": 4,
+        "depends_on": [
+            "Implement momentum trade execution and management",
+            "Implement basis trade execution and management",
+            "Implement persistent storage (DuckDB) and data models",
+            "Implement metrics exposure and Telegram alerting"
+        ],
+        "files_touched": [
+            "tests/"
+        ],
+        "commands": [
+            "pytest -v --cov=."
+        ],
+        "tests": [
+            "Given all modules implemented, When running `pytest`, Then all tests\npass with high coverage and no regressions.",
+            "Given a simulated price feed, When running an integration test in\n    paper mode, Then the bot executes a trade cycle correctly and all expected\n    records are created in the database."
+        ]
     },
     {
-    "title": "Finalize deployment configuration and runbook documentation",
-    "body": "- [ ] Finalizar archivos de despliegue: verificar `docker-
-    compose.yml` con todos los servicios (redis, marketdata, momentum, basis,
-    riskd) configurados correctamente (puertos, dependencias, límites de
-    recursos)\n- [ ] Completar `.env.sample` con todas las variables necesarias y
-    comentarios para facilitar configuración por el usuario\n- [ ] Escribir el
-    runbook (guía de despliegue/operación) con pasos claros: preparar droplet
-    (instalar Docker), desplegar con Compose, cómo verificar el estado (health,
-    metrics), cómo usar los endpoints (pausar, cambiar a live), rotar claves,
-    etc.\n- [ ] Incluir pasos de rollback o apagado seguro: cómo pausar bots y
-    cerrar posiciones antes de apagar el sistema, o cómo revertir a una versión
-    anterior del bot si se presentan problemas\n- [ ] Revisar uso de recursos en
-    droplet 1 vCPU/2GB: ajustar parámetros o número de procesos si es necesario
-    para estabilidad\n**DoD:** La documentación de despliegue permite a un
-    tercero reproducir la instalación: se sigue paso a paso en un droplet nuevo y
-    al final ambos bots están corriendo (en modo paper inicialmente),
-    respondiendo en sus endpoints `/healthz`. El usuario puede cambiar a modo
-    live vía API o reconfigurando `.env` y reiniciando. Se validan escenarios de
-    mantenimiento: por ejemplo, para actualizar a nueva versión, se documenta
-    pausar bots, actualizar contenedores y reanudar sin incurrir en posiciones
-    duplicadas.",
-    "labels": [
-    "devx",
-    "infra"
-    ],
-    "priority": "P3",
-    "estimate_hours": 2,
-    "depends_on": [
-    "Develop comprehensive unit and integration tests (paper mode)"
-    ],
-    "files_touched": [
-    "docker-compose.yml",
-    ".env.sample",
-    "README.md",
-    "runbook.md"
-    ],
-    "commands": [
-    "docker compose up -d --build",
-    "docker compose logs -f"
-    ],
-    "tests": [
-    "Given a fresh Ubuntu Droplet, When following the runbook steps, Then
-    Docker and Compose are installed and the services start successfully.",
-    "Given the bots are running in paper mode, When switching to live mode
-    49per instructions, Then the bots place real orders on the exchange (verified
-    on testnet or small real position).",
-    "Given a need to update the bot, When following the upgrade steps
-    (pause, pull new image, redeploy), Then the new version runs without leaving
-    orphan positions or processes."
-    ]
+        "title": "Finalize deployment configuration and runbook documentation",
+        "body": "- [ ] Finalizar archivos de despliegue: verificar `docker-\n    compose.yml` con todos los servicios (redis, marketdata, momentum, basis,\n    riskd) configurados correctamente (puertos, dependencias, l\u00edmites de\n    recursos)\n- [ ] Completar `.env.sample` con todas las variables necesarias y\n    comentarios para facilitar configuraci\u00f3n por el usuario\n- [ ] Escribir el\n    runbook (gu\u00eda de despliegue/operaci\u00f3n) con pasos claros: preparar droplet\n    (instalar Docker), desplegar con Compose, c\u00f3mo verificar el estado (health,\n    metrics), c\u00f3mo usar los endpoints (pausar, cambiar a live), rotar claves,\n    etc.\n- [ ] Incluir pasos de rollback o apagado seguro: c\u00f3mo pausar bots y\n    cerrar posiciones antes de apagar el sistema, o c\u00f3mo revertir a una versi\u00f3n\n    anterior del bot si se presentan problemas\n- [ ] Revisar uso de recursos en\n    droplet 1 vCPU/2GB: ajustar par\u00e1metros o n\u00famero de procesos si es necesario\n    para estabilidad\n**DoD:** La documentaci\u00f3n de despliegue permite a un\n    tercero reproducir la instalaci\u00f3n: se sigue paso a paso en un droplet nuevo y\n    al final ambos bots est\u00e1n corriendo (en modo paper inicialmente),\n    respondiendo en sus endpoints `/healthz`. El usuario puede cambiar a modo\n    live v\u00eda API o reconfigurando `.env` y reiniciando. Se validan escenarios de\n    mantenimiento: por ejemplo, para actualizar a nueva versi\u00f3n, se documenta\n    pausar bots, actualizar contenedores y reanudar sin incurrir en posiciones\n    duplicadas.",
+        "labels": [
+            "devx",
+            "infra"
+        ],
+        "priority": "P3",
+        "estimate_hours": 2,
+        "depends_on": [
+            "Develop comprehensive unit and integration tests (paper mode)"
+        ],
+        "files_touched": [
+            "docker-compose.yml",
+            ".env.sample",
+            "README.md",
+            "runbook.md"
+        ],
+        "commands": [
+            "docker compose up -d --build",
+            "docker compose logs -f"
+        ],
+        "tests": [
+            "Given a fresh Ubuntu Droplet, When following the runbook steps, Then\n    Docker and Compose are installed and the services start successfully.",
+            "Given the bots are running in paper mode, When switching to live mode\nper instructions, Then the bots place real orders on the exchange (verified\n    on testnet or small real position).",
+            "Given a need to update the bot, When following the upgrade steps\n    (pause, pull new image, redeploy), Then the new version runs without leaving\n    orphan positions or processes."
+        ]
     }
-    ]
+]
