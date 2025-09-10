@@ -8,7 +8,7 @@ import time
 import logging
 from typing import List
 
-import aioredis
+import redis.asyncio as aioredis
 import uvicorn
 from fastapi import FastAPI
 
@@ -16,7 +16,6 @@ from common.exchange import Exchange
 from datafeed.market_ws import MarketDataStreamer
 from datafeed.funding import schedule_funding_updates, compute_funding_percentiles
 from metrics.server import register_metrics, bot_up
-
 
 log = logging.getLogger("runner.marketdata")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -38,6 +37,7 @@ async def _funding_percentiles_loop(exchange: Exchange, redis, symbol: str) -> N
     use_pctl = os.getenv("USE_FUNDING_PERCENTILES", "false").lower() == "true"
     if not use_pctl:
         return
+
     lookback_days = int(os.getenv("FUNDING_PCTL_LOOKBACK_DAYS", "30"))
     p_long = float(os.getenv("FUNDING_LONG_MAX_PCTL", "40"))
     p_short = float(os.getenv("FUNDING_SHORT_MIN_PCTL", "60"))
@@ -55,10 +55,8 @@ async def _funding_percentiles_loop(exchange: Exchange, redis, symbol: str) -> N
 
 
 async def _price_heartbeat_from_pubsub(redis) -> None:
-    """
-    Actualiza metrics:last_price_ts cuando recibe cualquier mensaje de precio
-    vía pubsub (fijado por MarketDataStreamer).
-    """
+    """Actualiza metrics:last_price_ts cuando recibe cualquier mensaje de precio vía pub/sub."""
+    ps = None
     try:
         ps = redis.pubsub()
         await ps.psubscribe("price:*")
@@ -69,25 +67,43 @@ async def _price_heartbeat_from_pubsub(redis) -> None:
             await asyncio.sleep(0.01)
     except Exception as e:
         log.warning("price heartbeat pubsub caído: %s", e)
+    finally:
+        if ps is not None:
+            try:
+                await ps.close()
+            except Exception:
+                pass
 
 
 async def main() -> None:
     # --- ENV / Config ---
     raw_symbols = os.getenv("SYMBOLS", "BTCUSDT,ETHUSDT")
     symbols: List[str] = [s.strip().upper() for s in raw_symbols.split(",") if s.strip()]
+    if not symbols:
+        symbols = ["BTCUSDT"]
+
     intervals = [os.getenv("TF_PRIMARY", "1h"), os.getenv("TF_SECONDARY", "15m")]
     host = os.getenv("HTTP_HOST", "0.0.0.0")
     http_port = int(os.getenv("HTTP_PORT", "9002"))
     mode = os.getenv("MODE", "paper").lower()
 
     # --- Redis ---
-    redis = aioredis.from_url(os.getenv("REDIS_URL", "redis://redis:6379"), decode_responses=False)
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+    redis = aioredis.from_url(redis_url, decode_responses=True)
+    try:
+        await redis.ping()
+    except Exception as e:
+        log.warning("No se pudo PING a Redis en inicio: %s", e)
 
     # --- Streamer WS ---
     streamer = MarketDataStreamer(symbols, intervals, redis)
 
     # --- Exchange (para funding y utilidades) ---
-    exchange = Exchange(os.getenv("BINANCE_API_KEY", ""), os.getenv("BINANCE_API_SECRET", ""), testnet=(mode == "paper"))
+    exchange = Exchange(
+        os.getenv("BINANCE_API_KEY", ""),
+        os.getenv("BINANCE_API_SECRET", ""),
+        testnet=(mode == "paper"),
+    )
 
     # --- Tareas concurrentes: funding actual + percentiles opcionales ---
     funding_task = asyncio.create_task(schedule_funding_updates(exchange, symbols, redis))
@@ -99,7 +115,7 @@ async def main() -> None:
     http_task = asyncio.create_task(_run_http(app, host=host, port=http_port))
     bot_up.labels(bot="marketdata").set(1)
 
-    # --- Heartbeat de precios basado en pubsub ---
+    # --- Heartbeat de precios basado en pub/sub ---
     hb_task = asyncio.create_task(_price_heartbeat_from_pubsub(redis))
 
     # --- Señales para shutdown limpio ---
@@ -115,7 +131,10 @@ async def main() -> None:
         except NotImplementedError:
             pass
 
-    log.info("MarketData runner iniciado | symbols=%s intervals=%s http_port=%d mode=%s", symbols, intervals, http_port, mode)
+    log.info(
+        "MarketData runner iniciado | symbols=%s intervals=%s http_port=%d mode=%s",
+        symbols, intervals, http_port, mode
+    )
 
     # --- Ejecutar WS streamer (reconecta internamente) hasta que pidan stop ---
     ws_task = asyncio.create_task(streamer.start())

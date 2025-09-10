@@ -16,19 +16,20 @@ class RiskGuardian:
     - Lee métricas de Redis (pnl, ws downtime, latencia).
     - Escucha eventos de los bots desde el Stream 'events' (XREAD).
     - Aplica circuit breakers globales y alerta por Telegram.
+    Nota: se asume Redis con decode_responses=True (strings), pero el código
+    es tolerante si vienen bytes.
     """
 
     def __init__(self, redis, bots_api: Dict[str, str]) -> None:
         """
-        :param redis: cliente aioredis
+        :param redis: cliente redis.asyncio
         :param bots_api: map bot -> base URL (p.ej., {"momentum": "http://momentum:9001"})
         """
         self.redis = redis
         self.bots_api = bots_api
         self.alerted = False
-        # Estado del stream
         self._events_stream = os.getenv("EVENTS_STREAM", "events")
-        # Posición desde la cual leer (iniciar desde '$' => solo nuevos eventos)
+        # Iniciar desde '$' => solo eventos nuevos
         self._last_event_id = os.getenv("EVENTS_START_ID", "$")
 
     # ---------- Bucle principal ----------
@@ -62,7 +63,6 @@ class RiskGuardian:
         """
         # --- Daily drawdown ---
         dd_limit_ratio = float(os.getenv("DAILY_MAX_DD", "-0.05"))  # -5% por defecto
-        # Preferir ratio directo; si no existe, derivarlo de pnl_usdt/equity
         pnl_day_ratio = await self._get_float("metrics:pnl_day_ratio")
         if pnl_day_ratio is None:
             pnl_usdt = await self._get_float("metrics:pnl_day_usdt", default=0.0) or 0.0
@@ -72,7 +72,7 @@ class RiskGuardian:
         if pnl_day_ratio <= dd_limit_ratio:
             await self.pause_all_bots(reason=f"daily drawdown {pnl_day_ratio*100:.1f}%")
             self.alerted = True
-            return  # ya pausamos, no sigamos chequeando
+            return  # ya pausamos, no seguimos
 
         # --- WS downtime ---
         max_ws_downtime = float(os.getenv("WS_MAX_DOWNTIME_S", "60"))
@@ -92,7 +92,7 @@ class RiskGuardian:
             self.alerted = True
             return
 
-        # Si todo OK y había alerta previa, intentamos reanudar (opcional)
+        # Auto-resume opcional
         if self.alerted and os.getenv("AUTO_RESUME_ON_RECOVERY", "false").lower() == "true":
             await self.resume_all_bots()
             self.alerted = False
@@ -109,18 +109,23 @@ class RiskGuardian:
 
         # Asegurar que el stream exista (XADD de marcador si vacío)
         try:
-            exists = await self.redis.exists(stream)
-            if not exists:
+            if not await self.redis.exists(stream):
                 await self.redis.xadd(stream, {"event": "init"})
         except Exception:
             pass
 
         while True:
             try:
-                resp = await self.redis.xread(streams=[stream], count=10, latest_ids=[self._last_event_id], timeout=block_ms)
+                # redis-py firma: xread(streams: dict, count=None, block=None)
+                resp = await self.redis.xread(
+                    streams={stream: self._last_event_id},
+                    count=10,
+                    block=block_ms,
+                )
                 if not resp:
                     continue
-                # resp es lista de tuplas (stream, [(id, fields), ...])
+
+                # resp: [(stream_name, [(entry_id, {field: value}), ...])]
                 for _stream, entries in resp:
                     for entry_id, fields in entries:
                         self._last_event_id = entry_id
@@ -129,44 +134,45 @@ class RiskGuardian:
                 # No romper el loop por errores transitorios
                 await asyncio.sleep(0.5)
 
-    async def _handle_event(self, fields: Dict[bytes, bytes]) -> None:
-        """Procesa un evento del stream."""
+    async def _handle_event(self, fields: Dict[str, str] | Dict[bytes, bytes]) -> None:
+        """Procesa un evento del stream (tolerante a str o bytes)."""
+        def _to_str(v):
+            return v.decode() if isinstance(v, (bytes, bytearray)) else (v or "")
+
         try:
-            # Campos vienen como bytes; intentar parsear `event` y `bot`
-            event = fields.get(b"event", b"").decode() if isinstance(fields, dict) else ""
-            bot = fields.get(b"bot", b"").decode() if isinstance(fields, dict) else ""
-            payload_raw = fields.get(b"payload")
-            payload = json.loads(payload_raw.decode()) if payload_raw else {}
+            event = _to_str(fields.get("event") if "event" in fields else fields.get(b"event", b""))
+            bot = _to_str(fields.get("bot") if "bot" in fields else fields.get(b"bot", b""))
+            payload_raw = fields.get("payload") if "payload" in fields else fields.get(b"payload")
+            payload = json.loads(_to_str(payload_raw)) if payload_raw else {}
         except Exception:
             return
 
         if event == "drained":
-            # Un bot cerró todas las posiciones; aquí podríamos reasignar capital o notificar
             await self.send_telegram_alert(f"[riskd] Bot drained: {bot}")
         elif event == "pause":
             await self.send_telegram_alert(f"[riskd] Bot paused: {bot}")
         elif event == "resume":
             await self.send_telegram_alert(f"[riskd] Bot resumed: {bot}")
-        # Extensible: handle más tipos de evento según necesites
+        # Extensible: más tipos de evento si hace falta
 
     # ---------- Acciones sobre bots ----------
 
     async def pause_all_bots(self, reason: str) -> None:
-        for bot, base in self.bots_api.items():
-            try:
-                async with ClientSession() as sess:
+        async with ClientSession() as sess:
+            for _, base in self.bots_api.items():
+                try:
                     await sess.post(f"{base}/pause", timeout=3)
-            except Exception:
-                pass
+                except Exception:
+                    pass
         await self.send_telegram_alert(f"Pausing all trading: {reason}")
 
     async def resume_all_bots(self) -> None:
-        for bot, base in self.bots_api.items():
-            try:
-                async with ClientSession() as sess:
+        async with ClientSession() as sess:
+            for _, base in self.bots_api.items():
+                try:
                     await sess.post(f"{base}/resume", timeout=3)
-            except Exception:
-                pass
+                except Exception:
+                    pass
         await self.send_telegram_alert("Resuming trading after risk conditions cleared.")
 
     # ---------- Utilidades ----------
@@ -181,11 +187,9 @@ class RiskGuardian:
             server_time_ms: Optional[float] = await self._get_float("exchange:server_time_ms")
             if server_time_ms is None:
                 async with ClientSession() as sess:
-                    # endpoint público
                     async with sess.get("https://fapi.binance.com/fapi/v1/time", timeout=3) as r:
                         data = await r.json()
                         server_time_ms = float(data["serverTime"])
-                # cachear por un rato
                 await self.redis.set("exchange:server_time_ms", str(server_time_ms), ex=5)
 
             local_ms = time.time() * 1000.0

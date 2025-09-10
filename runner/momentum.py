@@ -6,7 +6,8 @@ import json
 import logging
 import os
 import signal
-from typing import List
+import time
+from typing import List, Dict, Any
 
 import redis.asyncio as aioredis
 import uvicorn
@@ -44,7 +45,11 @@ async def _renew_lock_loop(redis, key: str, holder: str, ttl: int, on_lost):
             ok = await locks.renew_lock(redis, key, holder, ttl=ttl)
             if not ok:
                 log.warning("Capital lock perdido (%s). Pausando y drenando…", key)
-                await on_lost()
+                # Intento de mitigación: drenar posiciones
+                try:
+                    await on_lost()
+                except Exception as e:
+                    log.error("Error en on_lost(): %s", e)
                 got = await locks.acquire_lock(redis, key, holder, ttl=ttl)
                 if got:
                     log.info("Capital lock recuperado por %s", holder)
@@ -68,20 +73,14 @@ async def _pubsub_loop(redis, symbol: str, executor: MomentumExecutor, stop_even
                 await asyncio.sleep(0.01)
                 continue
 
-            mtype = msg.get("type")
-            if mtype not in ("message", "pmessage"):
+            if msg.get("type") not in ("message", "pmessage"):
                 continue
 
             channel = msg.get("channel")
-            if isinstance(channel, bytes):
-                channel = channel.decode()
-
             data = msg.get("data")
-            if isinstance(data, bytes):
-                data = data.decode()
 
-            # Heartbeat para riskd (downtime WS)
-            await redis.set("metrics:last_price_ts", str(asyncio.get_running_loop().time()), ex=120)
+            # Heartbeat para riskd (downtime WS) usando epoch seconds
+            await redis.set("metrics:last_price_ts", str(time.time()), ex=120)
 
             if channel == chan_candle:
                 try:
@@ -92,7 +91,7 @@ async def _pubsub_loop(redis, symbol: str, executor: MomentumExecutor, stop_even
                     await executor.on_new_candle(close_price, high, low)
                 except Exception as e:
                     log.error("Error procesando candle: %s", e)
-            elif channel == chan_price and executor.active_position:
+            elif channel == chan_price and getattr(executor, "active_position", None):
                 try:
                     price = float(data)
                     await executor.on_price_update(price)
@@ -121,7 +120,7 @@ async def main() -> None:
     atr_min_pct = float(atr_min_pct_env)
 
     bot_id = os.getenv("BOT_ID", "momentum")
-    mode = os.getenv("MODE", "paper").lower()
+    initial_mode = os.getenv("MODE", "paper").lower()
     http_port = int(os.getenv("HTTP_PORT", "9001"))
     host = os.getenv("HTTP_HOST", "0.0.0.0")
 
@@ -129,7 +128,12 @@ async def main() -> None:
     lock_ttl = int(os.getenv("LOCK_TTL_SEC", "600"))
 
     # --- Redis ---
-    redis = aioredis.from_url(os.getenv("REDIS_URL", "redis://redis:6379"), decode_responses=False)
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+    redis = aioredis.from_url(redis_url, decode_responses=True)
+    try:
+        await redis.ping()
+    except Exception as e:
+        log.warning("No se pudo PING a Redis: %s", e)
 
     # --- Capital lock inicial (no bloqueante) ---
     got_lock = await locks.acquire_lock(redis, lock_key, bot_id, ttl=lock_ttl)
@@ -140,7 +144,7 @@ async def main() -> None:
     exchange = Exchange(
         os.getenv("BINANCE_API_KEY", ""),
         os.getenv("BINANCE_API_SECRET", ""),
-        testnet=(mode == "paper"),
+        testnet=(initial_mode == "paper"),
     )
 
     # --- Estrategia + Executor ---
@@ -156,8 +160,56 @@ async def main() -> None:
     )
     executor = MomentumExecutor(exchange, strategy, redis, bot_id)
 
+    # --- Estado expuesto por la API de control ---
+    # Usamos un contenedor mutable para mode (capturable por lambdas sync)
+    _state: Dict[str, Any] = {"mode": initial_mode}
+
+    def _status_payload() -> Dict[str, Any]:
+        # Ajustá acá lo que quieras ver en /status
+        payload: Dict[str, Any] = {
+            "ok": True,
+            "bot": bot_id,
+            "module": "momentum",
+            "symbol": symbol,
+            "base": base,
+            "mode": _state["mode"],
+            "equity_usdt": equity,
+            "risk_pct_per_trade": risk_pct,
+        }
+        # Datos opcionales del executor si existen de forma segura/síncrona
+        for attr in ("active_position", "last_signal", "open_orders"):
+            if hasattr(executor, attr):
+                try:
+                    payload[attr] = getattr(executor, attr)
+                except Exception:
+                    pass
+        return payload
+
+    def _get_mode() -> str:
+        return str(_state["mode"])
+
+    def _set_mode(m: str) -> None:
+        _state["mode"] = str(m or "").lower()
+
+    # No-ops seguros (los reales suelen ser async; podemos cablearlos luego con fondo)
+    def _pause() -> None:
+        log.info("pause() solicitado vía API (no-op síncrono).")
+
+    def _resume() -> None:
+        log.info("resume() solicitado vía API (no-op síncrono).")
+
+    def _close_all() -> None:
+        log.info("close_all() solicitado vía API (no-op síncrono).")
+
     # --- API control + métricas ---
-    app = create_control_api(bot_controller=executor)
+    app = create_control_api(
+        status=_status_payload,
+        pause=_pause,
+        resume=_resume,
+        close_all=_close_all,
+        get_mode=_get_mode,
+        set_mode=_set_mode,
+    )
     register_metrics(app)
     http_task = asyncio.create_task(_run_http(app, host=host, port=http_port))
     bot_up.labels(bot=bot_id).set(1)
@@ -180,7 +232,10 @@ async def main() -> None:
         except NotImplementedError:
             pass
 
-    log.info("Momentum runner iniciado | symbol=%s base=%s http_port=%d mode=%s", symbol, base, http_port, mode)
+    log.info(
+        "Momentum runner iniciado | symbol=%s base=%s http_port=%d mode=%s",
+        symbol, base, http_port, _state["mode"]
+    )
 
     # Esperar parada
     try:

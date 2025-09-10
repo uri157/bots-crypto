@@ -5,9 +5,9 @@ import asyncio
 import os
 import signal
 import logging
-from typing import Dict, List
+from typing import List, Dict, Any
 
-import aioredis
+import redis.asyncio as aioredis
 import uvicorn
 from fastapi import FastAPI
 
@@ -37,7 +37,10 @@ async def _renew_lock_loop(redis, key: str, holder: str, ttl: int, on_lost):
             ok = await locks.renew_lock(redis, key, holder, ttl=ttl)
             if not ok:
                 log.warning("Capital lock perdido (%s). Pausando y drenando…", key)
-                await on_lost()
+                try:
+                    await on_lost()
+                except Exception as e:
+                    log.error("Error en on_lost(): %s", e)
                 # Intentar recuperarlo en background
                 got = await locks.acquire_lock(redis, key, holder, ttl=ttl)
                 if got:
@@ -49,7 +52,7 @@ async def _renew_lock_loop(redis, key: str, holder: str, ttl: int, on_lost):
 
 async def _write_server_time_loop(redis):
     """Publica el server time de Binance para que riskd mida skew."""
-    import aiohttp, time
+    import aiohttp
     url = "https://fapi.binance.com/fapi/v1/time"
     while True:
         try:
@@ -71,14 +74,22 @@ async def main() -> None:
     risk_pct = float(os.getenv("RISK_PCT_PER_TRADE", "0.01"))
     bot_id = os.getenv("BOT_ID", "basis")
     http_port = int(os.getenv("HTTP_PORT", "9003"))
-    mode = os.getenv("MODE", "paper").lower()
+    initial_mode = os.getenv("MODE", "paper").lower()
     lock_key = os.getenv("CAPITAL_LOCK_KEY", "capital:lock")
     lock_ttl = int(os.getenv("LOCK_TTL_SEC", "600"))
     poll_sec = int(os.getenv("BASIS_LOOP_INTERVAL_SEC", "60"))
     host = os.getenv("HTTP_HOST", "0.0.0.0")
 
     # --- Redis ---
-    redis = aioredis.from_url(os.getenv("REDIS_URL", "redis://redis:6379"), decode_responses=False)
+    redis = aioredis.from_url(
+        os.getenv("REDIS_URL", "redis://redis:6379/0"),
+        decode_responses=True,
+    )
+    # Verificación rápida de conexión (no fatal si falla, pero útil para logs)
+    try:
+        await redis.ping()
+    except Exception as e:
+        log.warning("No se pudo PING a Redis en inicio: %s", e)
 
     # --- Lock inicial (no bloqueante) ---
     got_lock = await locks.acquire_lock(redis, lock_key, bot_id, ttl=lock_ttl)
@@ -89,7 +100,7 @@ async def main() -> None:
     exchange = Exchange(
         os.getenv("BINANCE_API_KEY", ""),
         os.getenv("BINANCE_API_SECRET", ""),
-        testnet=(mode == "paper"),
+        testnet=(initial_mode == "paper"),
     )
 
     # --- Estrategia + Executor (1 activo principal por MVP) ---
@@ -97,8 +108,54 @@ async def main() -> None:
     strategy = BasisStrategy(base, exchange)
     executor = BasisExecutor(exchange, strategy, redis, bot_id)
 
+    # --- Estado expuesto por la API de control ---
+    _state: Dict[str, Any] = {"mode": initial_mode, "base": base}
+
+    def _status_payload() -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "ok": True,
+            "bot": bot_id,
+            "module": "basis",
+            "bases": base_assets,
+            "base": _state["base"],
+            "mode": _state["mode"],
+            "equity_usdt": equity,
+            "risk_pct_per_trade": risk_pct,
+        }
+        # Datos opcionales del executor si existen de forma segura/síncrona
+        for attr in ("active_position", "spread", "last_update"):
+            if hasattr(executor, attr):
+                try:
+                    payload[attr] = getattr(executor, attr)
+                except Exception:
+                    pass
+        return payload
+
+    def _get_mode() -> str:
+        return str(_state["mode"])
+
+    def _set_mode(m: str) -> None:
+        _state["mode"] = str(m or "").lower()
+
+    # No-ops seguros por ahora (podemos cablear a métodos async luego)
+    def _pause() -> None:
+        log.info("pause() solicitado vía API (no-op síncrono).")
+
+    def _resume() -> None:
+        log.info("resume() solicitado vía API (no-op síncrono).")
+
+    def _close_all() -> None:
+        log.info("close_all() solicitado vía API (no-op síncrono).")
+
     # --- API control + métricas ---
-    app = create_control_api(bot_controller=executor)
+    app = create_control_api(
+        status=_status_payload,
+        pause=_pause,
+        resume=_resume,
+        close_all=_close_all,
+        get_mode=_get_mode,
+        set_mode=_set_mode,
+    )
     register_metrics(app)
     bot_up.labels(bot=bot_id).set(1)
 
@@ -120,7 +177,10 @@ async def main() -> None:
         except NotImplementedError:
             pass  # en Windows o entornos restringidos
 
-    log.info("Basis runner iniciado | bot_id=%s base=%s http_port=%d mode=%s", bot_id, base, http_port, mode)
+    log.info(
+        "Basis runner iniciado | bot_id=%s base=%s http_port=%d mode=%s",
+        bot_id, _state["base"], http_port, _state["mode"]
+    )
 
     # --- Bucle de trading ---
     try:

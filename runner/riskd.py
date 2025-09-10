@@ -13,7 +13,6 @@ from fastapi import FastAPI
 from metrics.server import register_metrics, bot_up
 from riskd.guard import RiskGuardian
 
-
 log = logging.getLogger("runner.riskd")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
@@ -26,7 +25,7 @@ async def _run_http(app: FastAPI, host: str, port: int) -> None:
 
 async def main() -> None:
     # --- ENV / Config ---
-    redis_url = os.getenv("REDIS_URL", "redis://redis:6379")
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
     http_host = os.getenv("HTTP_HOST", "0.0.0.0")
     http_port = int(os.getenv("HTTP_PORT", "9004"))
 
@@ -42,7 +41,11 @@ async def main() -> None:
     }
 
     # --- Redis client ---
-    redis = aioredis.from_url(redis_url, decode_responses=False)
+    redis = aioredis.from_url(redis_url, decode_responses=True)
+    try:
+        await redis.ping()
+    except Exception as e:
+        log.warning("No se pudo PING a Redis en inicio: %s", e)
 
     # --- Guardian ---
     guardian = RiskGuardian(redis, bots_api)
@@ -69,7 +72,10 @@ async def main() -> None:
     # --- Monitor loop ---
     monitor_task = asyncio.create_task(guardian.monitor())
 
-    log.info("Risk Guardian iniciado | http=%s:%d momentum=%s basis=%s", http_host, http_port, bots_api["momentum"], bots_api["basis"])
+    log.info(
+        "Risk Guardian iniciado | http=%s:%d momentum=%s basis=%s",
+        http_host, http_port, bots_api["momentum"], bots_api["basis"]
+    )
 
     try:
         await stop_event.wait()

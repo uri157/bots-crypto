@@ -1,4 +1,4 @@
-binance-connector
+binance-futures-connector==4.1.0
 ccxt
 numpy
 pandas
