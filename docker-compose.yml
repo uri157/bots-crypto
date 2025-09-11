@@ -13,6 +13,8 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   marketdata:
     build: .
@@ -42,6 +44,8 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   momentum:
     build: .
@@ -74,6 +78,8 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   basis:
     build: .
@@ -106,6 +112,8 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   riskd:
     build: .
@@ -139,6 +147,8 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   duckdb-data:

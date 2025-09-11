@@ -13,6 +13,10 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from binance.um_futures import UMFutures
 from binance.error import ClientError, ServerError  # disponible en binance-connector
 
+
+import logging
+log = logging.getLogger(__name__)
+
 # ---------- Excepciones ----------
 
 class ExchangeError(Exception):
@@ -91,14 +95,33 @@ class Exchange(IExchange):
         return await asyncio.to_thread(fn, *args, **kwargs)
 
     async def _warmup(self) -> None:
-        await self._load_exchange_info()
-        # Activa hedge dual-side si está seteado
+        """Carga exchangeInfo y configura dual-side con reintentos suaves."""
+        # 1) exchangeInfo con backoff
+        delay = 0.5
+        for attempt in range(1, 31):  # ~30 intentos, máx ~10s de espera entre intentos
+            try:
+                await self._load_exchange_info()
+                break
+            except Exception as e:
+                log.warning("exchange._warmup: exchangeInfo fallo (intento %d): %s", attempt, e)
+                await asyncio.sleep(delay)
+                delay = min(delay * 1.5, 10.0)
+        else:
+            log.error("exchange._warmup: no se pudo cargar exchangeInfo tras varios intentos; sigo sin bloquear.")
+            return  # no bloqueamos el arranque; el bot igual puede reintentar más tarde
+
+        # 2) setear hedge/dual-side con backoff (no bloqueante)
         dual_env = os.getenv("BINANCE_DUAL_SIDE", "true").lower() in ("1", "true", "yes")
-        try:
-            await self.set_position_mode(dual=dual_env)
-        except Exception:
-            # No bloquear el arranque por esto
-            pass
+        delay = 0.5
+        for attempt in range(1, 11):
+            try:
+                await self.set_position_mode(dual=dual_env)
+                break
+            except Exception as e:
+                log.warning("exchange._warmup: set_position_mode fallo (intento %d): %s", attempt, e)
+                await asyncio.sleep(delay)
+                delay = min(delay * 1.5, 10.0)
+        # si falla, no pasa nada: no bloqueamos
 
     async def close(self) -> None:
         """UMFutures no mantiene sockets aquí; nada que cerrar explícitamente."""
@@ -251,40 +274,73 @@ class Exchange(IExchange):
         self,
         symbol: str,
         side: str,
-        type_: str,
-        qty: float,
+        type_: Optional[str] = None,
+        qty: Optional[float] = None,
+        *,
         price: Optional[float] = None,
         stop_price: Optional[float] = None,
         client_id: Optional[str] = None,
         reduce_only: bool = False,
+        # -------- alias back-compat --------
+        order_type: Optional[str] = None,
+        quantity: Optional[float] = None,
+        origQty: Optional[float] = None,
+        newClientOrderId: Optional[str] = None,
+        timeInForce: Optional[str] = None,
+        **kwargs: Any,
     ) -> Mapping[str, Any]:
         """
-        Envía una orden a USDⓈ-M. Usa `newClientOrderId` para idempotencia.
-        Respeta `reduce_only` para cierres.
-        Nota: en LIMIT se requiere timeInForce (GTC por defecto aquí).
+        Back-compat: acepta order_type/quantity/origQty/newClientOrderId/timeInForce y los
+        traduce a los nombres que espera binance-connector (UMFutures.new_order).
         """
+        # --- tipo ---
+        t = (type_ or order_type or kwargs.get("type") or kwargs.get("orderType"))
+        if not t:
+            raise ExchangeError("place_order: missing order type")
+        t = str(t).upper()
+
+        # --- cantidad ---
+        q = None
+        for cand in (qty, quantity, origQty, kwargs.get("qty")):
+            if cand is not None:
+                q = float(cand)
+                break
+        if q is None:
+            raise ExchangeError("place_order: missing quantity")
+
+        # --- client id / TIF ---
+        cid = client_id or newClientOrderId or kwargs.get("clientOrderId")
+        tif = timeInForce or kwargs.get("time_in_force") or kwargs.get("timeInForce")
+
+        # Permite alias para precios
+        if price is None:
+            price = kwargs.get("limit_price") or kwargs.get("limitPrice")
+        if stop_price is None:
+            stop_price = kwargs.get("stop_price") or kwargs.get("stopPrice")
+
         params: Dict[str, Any] = {
             "symbol": symbol,
-            "side": side.upper(),
-            "type": type_.upper(),
-            "quantity": qty,
+            "side": str(side).upper(),
+            "type": t,
+            "quantity": q,
         }
-        if client_id:
-            params["newClientOrderId"] = client_id
+        if cid:
+            params["newClientOrderId"] = cid
         if price is not None:
-            params["price"] = price
+            params["price"] = float(price)
         if stop_price is not None:
-            params["stopPrice"] = stop_price
+            params["stopPrice"] = float(stop_price)
         if reduce_only:
             params["reduceOnly"] = True
-        if params["type"] == "LIMIT" and "timeInForce" not in params:
-            params["timeInForce"] = "GTC"
+        if t == "LIMIT" and not tif:
+            tif = "GTC"
+        if tif:
+            params["timeInForce"] = tif
 
         try:
-            res = await self._call(self._client.new_order, **params)
-            return res
+            return await asyncio.to_thread(self._client.new_order, **params)
         except Exception as e:
-            # tenacity decidirá si reintenta según _is_transient
+            # tenacity decide si reintenta
             raise e
 
     @retry(
@@ -301,3 +357,13 @@ class Exchange(IExchange):
             if "-2011" in repr(e):  # unknown order
                 return
             raise e
+
+    async def cancel_order(self, symbol: str, order_id: int | str) -> None:
+        """Cancela una orden específica por ID (idempotente)."""
+        try:
+            await self._call(self._client.cancel_order, symbol=symbol, orderId=order_id)
+        except Exception as e:
+            # Binance devuelve -2011 si ya no existe → lo ignoramos
+            if "-2011" in repr(e):
+                return
+            raise ExchangeError(f"Cancel order failed: {e}")
