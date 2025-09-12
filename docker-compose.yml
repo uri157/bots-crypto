@@ -20,17 +20,13 @@ services:
     build: .
     image: crypto-bot:latest
     container_name: marketdata
-    command: python -m runner.marketdata
+    command: ["python","-u","-m","runner.marketdata"]
     env_file: .env
     environment:
       BOT_ID: marketdata
       HTTP_PORT: 9002
-      ENABLE_MOMENTUM: "false"
-      ENABLE_BASIS: "false"
       REDIS_URL: redis://redis:6379/0
       DB_PATH: /app/data/trading.db
-      # Si querés separar símbolos por estrategia, dejá SYMBOLS global
-      # en .env y no sobreescribas acá.
     depends_on:
       redis:
         condition: service_healthy
@@ -40,110 +36,48 @@ services:
     ports:
       - "9002:9002"
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:9002/healthz',timeout=2).status==200 else sys.exit(1)\""]
+      test:
+        [
+          "CMD-SHELL",
+          "python - <<'PY'\nimport urllib.request,sys\nsys.exit(0) if urllib.request.urlopen('http://localhost:9002/healthz',timeout=2).status==200 else sys.exit(1)\nPY",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  momentum:
+  ema:
     build: .
     image: crypto-bot:latest
-    container_name: momentum
-    command: python -m runner.momentum
+    container_name: ema
+    command: ["python","-u","-m","runner.ema"]
     env_file: .env
     environment:
-      BOT_ID: momentum
+      BOT_ID: ema
       HTTP_PORT: 9001
-      ENABLE_MOMENTUM: "true"
-      ENABLE_BASIS: "false"
       REDIS_URL: redis://redis:6379/0
       DB_PATH: /app/data/trading.db
-      CAPITAL_LOCK_KEY: capital:lock:mm   # <-- lock propio
-      # OPTIONAL: para no pisarse símbolos entre estrategias, podés forzar:
-      # SYMBOLS: BTCUSDT
+      CAPITAL_LOCK_KEY: capital:lock:ema
+      # Si tu EMA depende del feed de marketdata (Redis), no hace falta tocar nada.
+      # Si lee directo del gateway WS/REST, podés prescindir de marketdata.
     depends_on:
       redis:
         condition: service_healthy
-      marketdata:
-        condition: service_healthy
+      # Descomenta si querés forzar que arranque cuando marketdata esté healthy:
+      # marketdata:
+      #   condition: service_healthy
     ports:
       - "9001:9001"
     volumes:
       - duckdb-data:/app/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:9001/healthz',timeout=2).status==200 else sys.exit(1)\""]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  basis:
-    build: .
-    image: crypto-bot:latest
-    container_name: basis
-    command: python -m runner.basis
-    env_file: .env
-    environment:
-      BOT_ID: basis
-      HTTP_PORT: 9003
-      ENABLE_MOMENTUM: "false"
-      ENABLE_BASIS: "true"
-      REDIS_URL: redis://redis:6379/0
-      DB_PATH: /app/data/trading.db
-      CAPITAL_LOCK_KEY: capital:lock:bs   # <-- lock propio
-      # OPTIONAL: si querés separarlo de momentum:
-      # SYMBOLS: ETHUSDT
-    depends_on:
-      redis:
-        condition: service_healthy
-      marketdata:
-        condition: service_healthy
-    ports:
-      - "9003:9003"
-    volumes:
-      - duckdb-data:/app/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:9003/healthz',timeout=2).status==200 else sys.exit(1)\""]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  riskd:
-    build: .
-    image: crypto-bot:latest
-    container_name: riskd
-    command: python -m runner.riskd
-    env_file: .env
-    environment:
-      BOT_ID: riskd
-      HTTP_PORT: 9004
-      ENABLE_MOMENTUM: "false"
-      ENABLE_BASIS: "false"
-      REDIS_URL: redis://redis:6379/0
-      DB_PATH: /app/data/trading.db
-    depends_on:
-      redis:
-        condition: service_healthy
-      momentum:
-        condition: service_healthy
-      basis:
-        condition: service_healthy
-      marketdata:
-        condition: service_healthy
-    ports:
-      - "9004:9004"
-    restart: unless-stopped
-    volumes:
-      - duckdb-data:/app/data
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:9004/healthz',timeout=2).status==200 else sys.exit(1)\""]
+      test:
+        [
+          "CMD-SHELL",
+          "python - <<'PY'\nimport urllib.request,sys\nsys.exit(0) if urllib.request.urlopen('http://localhost:9001/healthz',timeout=2).status==200 else sys.exit(1)\nPY",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3

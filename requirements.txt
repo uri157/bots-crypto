@@ -13,3 +13,5 @@ uvicorn
 prometheus-client
 pydantic
 uvloop; sys_platform == 'linux'
+prometheus-client>=0.20.0
+packaging>=23.0
