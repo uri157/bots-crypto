@@ -77,11 +77,13 @@ class EmaExecutor:
 
     # ---- core ----
     async def on_candle_close(self, close: float) -> None:
-        """Invocar al cerrar vela principal."""
-        # 1) actualizar EMAs
-        self.strategy.update_candle(close)
-        # 2) consultar señal (sin args)
-        signal = self.strategy.generate_signal()
+        # Nueva API: la estrategia actualiza internamente y devuelve la señal
+        try:
+            signal = self.strategy.generate_signal(close)   # <- correcto
+        except TypeError:
+            # Compat temporal con builds viejas
+            self.strategy.update_candle(close)
+            signal = self.strategy.generate_signal()
 
         if signal == "LONG":
             await self._ensure_long(close)
@@ -89,9 +91,7 @@ class EmaExecutor:
             if self.cfg.allow_shorts:
                 await self._ensure_short(close)
             else:
-                # Si NO permitimos shorts, ante señal SHORT cerramos LONG si existe
                 await self._close_position(market_price=close)
-        # si no hay cruce, no hacemos nada
 
     async def _ensure_long(self, close: float) -> None:
         # si ya estamos long, no-op; si está short → cerrar y girar

@@ -10,9 +10,10 @@ from prometheus_client import (
     Histogram,
     CONTENT_TYPE_LATEST,
     generate_latest,
+    REGISTRY as _DEFAULT_REGISTRY,   # <- default registry global
 )
 
-# ========= Definición de métricas =========
+# ========= Definición de métricas (sobre la DEFAULT REGISTRY) =========
 
 # Estado del proceso/bot
 bot_up = Gauge("bot_up", "Bot process running (1=up)", ["bot"])
@@ -41,20 +42,25 @@ slippage_bps = Histogram(
 
 # Funding y basis en vivo
 funding_now_bps = Gauge("funding_now_bps", "Current funding rate in bps", ["symbol"])
-basis_now_pct = Gauge("basis_now_pct", "Current basis percentage", ["symbol"])
+basis_now_pct   = Gauge("basis_now_pct", "Current basis percentage", ["symbol"])
 
 # Margen libre / ratio de margen
 margin_ratio = Gauge("margin_ratio", "Current free margin ratio")
 
 # Funding realizado (sumatorio)
-funding_realized_usdt = Counter(
-    "funding_realized_usdt", "Total funding realized in USDT"
-)
+funding_realized_usdt = Counter("funding_realized_usdt", "Total funding realized in USDT")
 
 # Órdenes rechazadas por filtros de riesgo
-rejected_orders_count = Counter(
-    "rejected_orders_count", "Count of orders rejected due to risk filters"
-)
+rejected_orders_count = Counter("rejected_orders_count", "Count of orders rejected due to risk filters")
+
+# ========= Export que el runner espera =========
+# Usamos la default registry de prometheus_client
+REG   = _DEFAULT_REGISTRY     # <- para generate_latest(REG)
+BOT_UP = bot_up               # <- alias con el nombre que importa el runner
+
+def start_metrics_http(_port: int, _bot: str) -> None:
+    """No levantamos servidor aparte; el runner expone /metrics."""
+    return
 
 # ========= Helpers para actualizar métricas desde otros módulos =========
 
@@ -94,8 +100,7 @@ def add_funding_realized_usdt(value: float) -> None:
 def inc_rejected_orders(n: int = 1) -> None:
     rejected_orders_count.inc(n)
 
-
-# ========= Registro de endpoints =========
+# ========= Registro de endpoints (opcional) =========
 
 def register_metrics(
     app: FastAPI,
@@ -111,7 +116,8 @@ def register_metrics(
 
     @router.get("/metrics")
     async def metrics() -> Response:
-        content = generate_latest()
+        # usamos la default registry (REG)
+        content = generate_latest(REG)
         return Response(content=content, media_type=CONTENT_TYPE_LATEST)
 
     @router.get("/healthz")
