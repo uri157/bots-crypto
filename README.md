@@ -1,4 +1,4 @@
-# bots-crypto (EMA branch)
+# bots-crypto
 
 Minimal **trading-bot** stack targeting **Binance USDⓈ-M Futures**. It comprises:
 
@@ -6,7 +6,9 @@ Minimal **trading-bot** stack targeting **Binance USDⓈ-M Futures**. It compris
 * **ema** — EMA-cross strategy that **polls** Redis for the latest closed candle, sizes entries, places **MARKET** orders and **reduce-only STOP_MARKET** exits via a Binance Futures adapter, and (optionally) **logs trades** to a DB.
 * All services expose **`/healthz`** and **`/metrics`** (Prometheus) and are configured via **environment variables**.
 
-> The bot talks to **Binance UM Futures** (or any compatible gateway). If you point it at a local simulator, it should work transparently as long as it mirrors Binance’s futures endpoints.
+> The bot talks to **Binance UM Futures** (or any compatible gateway). If you point it at a local simulator, it should work transparently as long as it mirrors Binance’s **futures** endpoints.
+
+> **Note:** This layout is the **baseline architecture for the main branch** going forward. Additional strategies will plug into the same interfaces without changing the core services.
 
 ---
 
@@ -17,7 +19,7 @@ Minimal **trading-bot** stack targeting **Binance USDⓈ-M Futures**. It compris
                  ↑                │
                  │  WS /stream    │  Redis
                  │                ▼
-          [marketdata]  →  key: candle:last:{SYMBOL}:{TF}
+          [marketdata]  →  key:  candle:last:{SYMBOL}:{TF}
                           pubsub: candles:{SYMBOL}:{TF}
 
                  └────────────── HTTP /fapi/v1/*, /fapi/v2/* ───────────→  [ema]
@@ -31,13 +33,13 @@ Minimal **trading-bot** stack targeting **Binance USDⓈ-M Futures**. It compris
 
 ---
 
-## Repository layout (EMA branch)
+## Repository layout
 
 ```
 bots-crypto/
 ├─ common/
 │  ├─ exchange.py        # Async adapter over Binance UM Futures (binance-connector)
-│  └─ locks.py           # (not used by EMA runner)
+│  └─ locks.py           # (not used by EMA runner in this branch)
 ├─ datafeed/
 │  ├─ market_ws.py       # WS client for klines (and mark price)
 │  └─ funding.py         # (stubs; not enforced by EMA)
@@ -201,14 +203,15 @@ If you enable DB logging (`DB_ENABLED=true` + `DB_URL`):
   * `orders`, `fills`, `positions`, `ledger`, `metrics`
 * Intended use: **auditing**, **PnL analysis**, offline **analytics**.
 
-> There is **no HTTP/API logging sink** in this branch; logging is DB-only when enabled.
+> There is **no HTTP/API logging sink** in this mainline; logging is DB-only when enabled.
 
 ---
 
-## Metrics (Prometheus)
+## Roadmap (architecture)
 
-* `bot_up{bot="marketdata"}` and `bot_up{bot="ema"}`
-* `order_latency_ms_bucket|count|sum` — REST order ACK histogram
+* Keep this **single core** (marketdata + strategy runner + adapters).
+* Add new strategies as **modules/plugins** reusing the same exchange/redis/storage interfaces.
+* Optionally switch the EMA runner to **pub/sub** consumption (instead of polling) in a future iteration.
 
 ---
 
@@ -233,6 +236,4 @@ If you enable DB logging (`DB_ENABLED=true` + `DB_URL`):
 
 ## Notes
 
-This branch focuses on an **EMA cross** with simple sizing & stops. Funding filters, slippage caps, and capital-lock features are **not** enabled here. Use DB logging if you need post-trade analytics.
-
----
+This mainline focuses on an **EMA cross** with simple sizing & stops. Funding filters, slippage caps, and capital-lock features are **not** enabled here. Use DB logging if you need post-trade analytics.
