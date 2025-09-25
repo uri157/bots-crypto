@@ -1,68 +1,81 @@
-# bots-crypto
+# bots-crypto (EMA branch)
 
-Minimal **trading bots** stack in Docker.
+Minimal **trading-bot** stack targeting **Binance USDⓈ-M Futures**. It comprises:
 
-> **Purpose:** Bots designed to operate against **Binance UM Futures**.
-> They also work with **any Binance-compatible API** (same REST `/fapi/*` and WS `/stream`), including simulators—but that’s purely on the API provider side.
+* **marketdata** — subscribes to Binance-style **WebSocket** klines (and optional mark price) and writes the **latest closed candle** to **Redis** (key + pub/sub).
+* **ema** — EMA-cross strategy that **polls** Redis for the latest closed candle, sizes entries, places **MARKET** orders and **reduce-only STOP_MARKET** exits via a Binance Futures adapter, and (optionally) **logs trades** to a DB.
+* All services expose **`/healthz`** and **`/metrics`** (Prometheus) and are configured via **environment variables**.
 
-## Components
-
-* **marketdata** — subscribes to Binance-style **WebSocket** klines/mark price and writes the **latest closed candle** to **Redis** (key + pub/sub).
-* **ema** — EMA-cross strategy that consumes Redis **pub/sub**, sizes orders, places **MARKET** entries and reduce-only **STOP_MARKET** exits via a Binance adapter, and can **log trades** for analytics.
-* *(optional)* **metrics** — Prometheus registry (if you prefer a central one).
-* *(optional / WIP)* **control** — small HTTP API for orchestration / external logging sink.
-
-Each service exposes **`/healthz`** and **`/metrics`** (Prometheus). Configuration is via **environment variables**.
+> The bot talks to **Binance UM Futures** (or any compatible gateway). If you point it at a local simulator, it should work transparently as long as it mirrors Binance’s futures endpoints.
 
 ---
 
 ## Topology
 
 ```
-[Binance UM Futures]  ←─ WS/HTTP (Binance) ─→  [marketdata]
-                                            │
-                                            │  Redis
-                                            ▼
-                                   key:  candle:last:{SYMBOL}:{TF}
-                                   chan: candles:{SYMBOL}:{TF}
-                   HTTP (orders/info) ─────→  [ema]
-                                               └─ trade logs →
-                                                  [storage DB]  (default)
-                                                  [external API] (alt, WIP)
+[Binance UM Futures (or compatible gateway)]
+                 ↑                │
+                 │  WS /stream    │  Redis
+                 │                ▼
+          [marketdata]  →  key: candle:last:{SYMBOL}:{TF}
+                          pubsub: candles:{SYMBOL}:{TF}
+
+                 └────────────── HTTP /fapi/v1/*, /fapi/v2/* ───────────→  [ema]
 ```
+
+* `marketdata` subscribes to `${symbol}@kline_${TF}`; on **closed candle** (`x=true`) it:
+
+  * sets `candle:last:{SYMBOL}:{TF}` (raw kline JSON), and
+  * **publishes** the same payload on `candles:{SYMBOL}:{TF}` (pub/sub).
+* `ema` **polls** the `candle:last:{SYMBOL}:{TF}` key (no pub/sub consumption in this branch) and reacts when the stored candle changes.
 
 ---
 
-## Repository layout (high-level)
+## Repository layout (EMA branch)
 
 ```
 bots-crypto/
-├─ common/               # exchange adapter (Binance UMFutures), locks
-├─ datafeed/             # WS client for klines/mark price, funding helpers
-├─ ema/                  # EMA strategy (signals) + executor (orders/stops/logs)
-├─ runner/               # service entries (marketdata, ema) with /healthz /metrics
-├─ storage/              # DB helpers + schema (orders, fills, positions, ledger)
-├─ metrics/              # optional central Prometheus registry
-├─ control/              # (WIP) HTTP control / external log receiver
-├─ docker-compose.yml    # redis + marketdata + ema (and optional daemons)
+├─ common/
+│  ├─ exchange.py        # Async adapter over Binance UM Futures (binance-connector)
+│  └─ locks.py           # (not used by EMA runner)
+├─ datafeed/
+│  ├─ market_ws.py       # WS client for klines (and mark price)
+│  └─ funding.py         # (stubs; not enforced by EMA)
+├─ ema/
+│  ├─ config.py          # Reads EMA env vars (fast/slow, alloc, stop, allow_shorts)
+│  ├─ strategy.py        # EmaCrossStrategy → "LONG" | "SHORT" | "NONE"
+│  ├─ executor.py        # Sends MARKET + reduce-only STOP_MARKET; optional DB logging
+│  └─ services/          # orders.py, stops.py helpers
+├─ runner/
+│  ├─ marketdata.py      # WS → Redis (key + pub/sub), /healthz, /metrics
+│  └─ ema.py             # Poll Redis key → strategy/executor, /healthz, /metrics
+├─ storage/
+│  ├─ db.py              # DB connection helpers (uses DB_URL)
+│  ├─ models.py          # tables: orders, fills, positions, ledger, metrics
+│  └─ (no HTTP sink in this branch)
+├─ metrics/server.py     # optional central registry (services also self-expose)
+├─ docker-compose.yml
+├─ Dockerfile
+├─ schemas.sql
+├─ requirements.txt
 └─ .env.sample
 ```
 
 ---
 
-## Docker services (default)
+## Docker Compose services
 
 * `redis`
-* `marketdata` (defaults to `:9002`)
-* `ema` (defaults to `:9001`)
+* `marketdata` (default **:9002**)
+* `ema` (default **:9001**)
 
-If you add optional daemons (metrics/control), include their ports in your compose.
+Each exposes **`/healthz`** and **`/metrics`** on its HTTP port.
 
 ---
 
-## Configuration
+## Environment variables
 
-Copy and edit defaults:
+Copy defaults and edit:
 
 ```bash
 cp .env.sample .env
@@ -72,54 +85,48 @@ cp .env.sample .env
 
 * `REDIS_URL` — e.g. `redis://redis:6379/0`
 * `LOG_LEVEL` — `INFO` or `DEBUG`
-
-**Binance endpoints (choose one set):**
-
-* **Production**
-  `BINANCE_BASE_URL=https://fapi.binance.com`
-  `BINANCE_WS_BASE=wss://fstream.binance.com`
-* **Testnet**
-  `BINANCE_BASE_URL=https://testnet.binancefuture.com`
-  `BINANCE_WS_BASE=wss://stream.binancefuture.com`
-  `TESTNET=true`
-* **Any Binance-compatible API** (if you run one)
-  `BINANCE_BASE_URL=http://host.docker.internal:9010`
-  `BINANCE_WS_BASE=ws://host.docker.internal:9010`
+* `BINANCE_BASE_URL` — REST base, e.g. `http://host.docker.internal:9010` or `https://fapi.binance.com`
+* `BINANCE_WS_BASE` — WS base, e.g. `ws://host.docker.internal:9010` or `wss://fstream.binance.com`
+* `TESTNET` — `true|false` (passed to EMA config if needed)
 
 **marketdata**
 
-* `SYMBOLS=BTCUSDT` (comma-separated to track more)
-* `TF_PRIMARY=1h`
-* `HTTP_PORT=9002`
+* `SYMBOLS` — e.g. `BTCUSDT` (comma-separated to track multiple)
+* `TF_PRIMARY` — e.g. `1h` (and optional `TF_SECONDARY=15m`)
+* `HTTP_PORT` — default `9002`
 
-**ema**
+**ema (strategy/execution)**
 
-* `BOT_ID=ema`
-* Strategy & sizing: `EMA_FAST`, `EMA_SLOW`, `ALLOC_USDT`
-* Stops & safety: `STOP_PCT`, `SLIPPAGE_CAP_BPS`, `CAPITAL_LOCK_KEY`
-* Optional filters: `FUNDING_MAX_BPS`, `FUNDING_WINDOW_H`
-* `HTTP_PORT=9001`
+* `SYMBOL` — single symbol, e.g. `BTCUSDT`
+* `TF_PRIMARY` — timeframe to read from Redis (must match marketdata)
+* `EMA_FAST`, `EMA_SLOW` — EMA windows (e.g. `2`, `4`)
+* `ALLOC_USDT` — notional per entry sizing
+* `STOP_PCT` — reduce-only stop distance (e.g. `0.01` for 1%)
+* `EMA_ALLOW_SHORTS` — `true|false`
+* `BOT_ID` — metrics label (default `ema`)
+* `HTTP_PORT` — default `9001`
 
-**Storage (trade logging, default)**
+**Storage (optional trade logging)**
 
-* `DATABASE_URL=postgresql://…` *(or DuckDB/SQLite — see `schemas.sql`)*
+* `DB_ENABLED` — `true|false`
+* `DB_URL` — DB connection string (Postgres / DuckDB / SQLite). See `schemas.sql`.
 
-**External logging (WIP alternative)**
-
-* `LOG_SINK=api`
-* `LOG_API_BASE_URL=https://your-logger`
-* `LOG_API_TOKEN=…`
+> Linux tip: if `host.docker.internal` doesn’t resolve, use your host IP or run your gateway/simulator in the same compose and target its service name.
 
 ---
 
-## Run
+## Quick start (Docker)
+
+1. Ensure your **Binance UM Futures** endpoint (or compatible gateway) is reachable via `BINANCE_BASE_URL` and **WS** via `BINANCE_WS_BASE`.
+
+2. Bring up services:
 
 ```bash
 docker compose build marketdata ema
 docker compose up -d redis marketdata ema
 ```
 
-Health & metrics:
+3. Health & metrics:
 
 ```bash
 curl -s http://localhost:9002/healthz
@@ -127,12 +134,20 @@ curl -s http://localhost:9001/healthz
 curl -s http://localhost:9001/metrics | head
 ```
 
-Redis activity:
+4. Verify Redis activity:
 
 ```bash
+# Keys written by marketdata
 docker compose exec redis sh -lc "redis-cli --scan --pattern 'candle:last:*' | head"
 docker compose exec redis sh -lc "redis-cli GET candle:last:BTCUSDT:1h | head -c 200; echo"
-docker compose exec redis sh -lc "redis-cli SUBSCRIBE candles:BTCUSDT:1h"
+```
+
+5. Check orders/position (on your UM Futures endpoint):
+
+```bash
+# Open orders & position (Binance futures-style paths)
+curl -s "${BINANCE_BASE_URL}/fapi/v1/openOrders?symbol=BTCUSDT"
+curl -s "${BINANCE_BASE_URL}/fapi/v2/positionRisk?symbol=BTCUSDT"
 ```
 
 ---
@@ -143,54 +158,81 @@ docker compose exec redis sh -lc "redis-cli SUBSCRIBE candles:BTCUSDT:1h"
 
 * Connects WS: `${BINANCE_WS_BASE}/stream`
 * Subscribes: `${symbol}@kline_${TF_PRIMARY}` (+ mark price if enabled)
-* On **closed candle** (`x=true`):
+* On **closed** kline (`x=true`):
 
-  * sets `candle:last:{SYMBOL}:{TF}`
-  * **publishes** to `candles:{SYMBOL}:{TF}` (Redis pub/sub)
-* Exposes `GET /healthz`, `GET /metrics`
+  * `SET candle:last:{SYMBOL}:{TF}` → raw kline JSON `{t,T,s,i,o,c,h,l,v,x:true,...}`
+  * `PUBLISH candles:{SYMBOL}:{TF}` → same payload
+* Exposes `GET /healthz`, `GET /metrics` (Prometheus)
 
 ### `runner/ema.py`
 
-* **Subscribes** to `candles:{SYMBOL}:{TF}` via Redis pub/sub
-* On each closed candle:
+* **Polls** `candle:last:{SYMBOL}:{TF}` (no pub/sub in this branch)
+* On new closed candle:
 
   * `EmaCrossStrategy` → `"LONG" | "SHORT" | "NONE"`
-  * `EmaExecutor` places **MARKET** entries, **reduce-only STOP_MARKET** exits, applies **slippage caps** and a Redis **capital lock**
-  * **Logs trades** to DB (default) or **POSTs** to external API (WIP)
-* Metrics: `bot_up{bot="ema"}`, `order_latency_ms_*` (histogram)
+  * `EmaExecutor`:
+
+    * places **MARKET** entry (sized from `ALLOC_USDT`)
+    * places **reduce-only STOP_MARKET** exit at `STOP_PCT`
+    * optional DB logging if `DB_ENABLED=true` and `DB_URL` is set
+* Metrics: `bot_up{bot="<BOT_ID>"}` and `order_latency_ms_*` (REST ACK histogram)
+* Exposes `GET /healthz`, `GET /metrics`
 
 ---
 
-## Exchange adapter
+## Exchange adapter (UM Futures)
 
-`common/exchange.py` is an async adapter over **binance-connector UMFutures**:
+`common/exchange.py` uses **binance-connector**’s **UMFutures**:
 
+* Futures REST paths `/fapi/v1/*`, `/fapi/v2/*`
+* Attempts to enable **dual-side hedge mode**
+* Supports **reduce-only** flags
 * Caches `exchangeInfo` (filters like `stepSize`/`tickSize`)
-* Places/cancels orders (MARKET, reduce-only **STOP_MARKET**)
-* Reads account/position/funding
-* Retries/backoff suitable for bots
+* Retries suitable for bot workloads
 
 ---
 
-## Trade logging (analytics)
+## Trade logging (optional)
 
-* **Default sink: DB** (`DATABASE_URL`)
-  Tables: `orders`, `fills`, `positions`, `ledger`, `metrics` (see `schemas.sql`).
-* **Alternative sink (WIP): HTTP API**
-  Set `LOG_SINK=api` and point to your receiver (`LOG_API_BASE_URL`).
-  Keep `schemas.sql` as the field contract.
+If you enable DB logging (`DB_ENABLED=true` + `DB_URL`):
+
+* **Tables** (see `schemas.sql` and `storage/models.py`):
+
+  * `orders`, `fills`, `positions`, `ledger`, `metrics`
+* Intended use: **auditing**, **PnL analysis**, offline **analytics**.
+
+> There is **no HTTP/API logging sink** in this branch; logging is DB-only when enabled.
+
+---
+
+## Metrics (Prometheus)
+
+* `bot_up{bot="marketdata"}` and `bot_up{bot="ema"}`
+* `order_latency_ms_bucket|count|sum` — REST order ACK histogram
 
 ---
 
 ## Troubleshooting
 
-* **404 on `/fapi/v1/exchangeInfo`** → Your `BINANCE_BASE_URL` isn’t a Binance-style API. Point it to Binance (prod/testnet) or a truly compatible API.
-* **No `candle:last:*` keys** → Check WS base, symbol/interval, and `marketdata` logs.
-* **No orders from `ema`** → Match `SYMBOL`/`SYMBOLS` and `TF_PRIMARY`; try small EMAs (`2/4`) to force crosses; verify `ALLOC_USDT`, `STOP_PCT`, `SLIPPAGE_CAP_BPS`.
-* **DB connection refused** → Disable DB logging or fix `DATABASE_URL`.
+* **404 `/fapi/v1/exchangeInfo`**
+  Your `BINANCE_BASE_URL` is wrong or the target does not expose Binance **futures** paths. Point to UM Futures (or a compatible gateway).
+
+* **No `candle:last:*` keys**
+  Check WS base/protocol (`BINANCE_WS_BASE`), symbol/TF exist, and `marketdata` logs for WS errors.
+
+* **EMA not trading**
+  Ensure `SYMBOL`/`TF_PRIMARY` match between services; try small EMAs (`EMA_FAST=2`, `EMA_SLOW=4`) to force crosses; confirm `ALLOC_USDT`/`STOP_PCT`.
+
+* **Metrics empty**
+  Hit `/metrics` directly; verify `BOT_ID` label; check compose port mapping.
+
+* **Linux & `host.docker.internal`**
+  Use host IP or run your gateway/simulator inside the same compose.
 
 ---
 
-## Disclaimer
+## Notes
 
-This is **simulation/testing** software. Not financial advice. No performance guarantees.
+This branch focuses on an **EMA cross** with simple sizing & stops. Funding filters, slippage caps, and capital-lock features are **not** enabled here. Use DB logging if you need post-trade analytics.
+
+---
