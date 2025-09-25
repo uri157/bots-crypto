@@ -52,7 +52,7 @@ bots-crypto/
 │  ├─ marketdata.py      # WS → Redis (key + pub/sub), /healthz, /metrics
 │  └─ ema.py             # Poll Redis key → strategy/executor, /healthz, /metrics
 ├─ storage/
-│  ├─ db.py              # DB connection helpers (uses DB_URL)
+│  ├─ db.py              # DuckDB helpers via DB_PATH (legacy module)
 │  ├─ models.py          # tables: orders, fills, positions, ledger, metrics
 │  └─ (no HTTP sink in this branch)
 ├─ metrics/server.py     # optional central registry (services also self-expose)
@@ -82,6 +82,11 @@ Copy defaults and edit:
 ```bash
 cp .env.sample .env
 ```
+
+> **Heads-up:** `.env.sample` still contains legacy keys (e.g. `EQUITY_USDT`,
+> `RISK_PCT_PER_TRADE`) from the old sizing engine. Set the documented
+> variables below (`ALLOC_USDT`, `STOP_PCT`, etc.) manually – the sample file
+> doesn’t include them yet.
 
 **Common**
 
@@ -200,8 +205,11 @@ If you enable DB logging (`DB_ENABLED=true` + `DB_URL`):
 
 * **Tables** (see `schemas.sql` and `storage/models.py`):
 
-  * `orders`, `fills`, `positions`, `ledger`, `metrics`
-* Intended use: **auditing**, **PnL analysis**, offline **analytics**.
+  * `strategy_configs`, `runs`, `orders`, `fills` are populated by the EMA runner.
+  * `positions`, `ledger`, `metrics` are defined for legacy analytics but not
+    written by this branch.
+* Intended use: **auditing**, **PnL analysis**, offline **analytics** once the
+  downstream loaders populate the legacy tables.
 
 > There is **no HTTP/API logging sink** in this mainline; logging is DB-only when enabled.
 
